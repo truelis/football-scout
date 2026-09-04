@@ -1,0 +1,9 @@
+data/
+transform/target/
+transform/dbt_packages/
+transform/logs/
+transform/package-lock.yml
+__pycache__/
+*.pyc
+.venv/
+.env

@@ -1,0 +1,59 @@
+name: 'football_scout'
+version: '1.0.0'
+config-version: 2
+profile: 'football_scout'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  football_scout:
+    staging:
+      # TABLES, not views. Deliberate: staging reads an ATTACHED read-only
+      # database (`tm`), so a view over it fails for any consumer that has not
+      # attached it - the Streamlit app included. Materialising costs a little
+      # disk and makes data/scout.duckdb fully self-contained and portable.
+      +materialized: table
+    intermediate:
+      +materialized: table
+    marts:
+      +materialized: table
+
+# ---------------------------------------------------------------------------
+# ALL TUNABLE PARAMETERS LIVE HERE. Never hard-code these in a model.
+# Override at runtime:  dbt build --vars '{max_market_value_eur: 3000000}'
+# ---------------------------------------------------------------------------
+vars:
+  # -- as-of date. Drives contract maths and "current" season. Overridden by
+  #    the backtest harness in Phase 3 to rebuild features at a past date.
+  as_of_date: '2026-09-04'
+
+  # -- the season to score on (season = year the campaign started)
+  reference_season: 2025
+
+  # -- price filter. TM value != fee; fees for prospects run ~1.5-2.5x TM value,
+  #    so cap TM value below the true budget.
+  max_market_value_eur: 4000000
+  fee_multiplier: 1.8
+
+  # -- eligibility
+  max_age: 23
+  min_minutes: 900
+  min_minutes_if_trending: 600
+
+  # -- age curve (peak_age = top of the curve, decay = penalty steepness)
+  peak_age: 25.5
+  age_curve_width: 6.0
+
+  # -- composite weights (need not sum to 1; normalised in the model)
+  w_performance: 0.45
+  w_trajectory: 0.35
+  w_availability: 0.20
+
+  # -- contract leverage thresholds, in months remaining
+  contract_leverage_months: 18
+  contract_bargain_months: 12

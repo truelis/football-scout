@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: tm
+    description: >
+      dcaribou/transfermarkt-datasets, attached read-only as `tm`.
+      Refreshed weekly upstream. Schemas mirror that project's curated models.
+    database: tm
+    schema: main
+    tables:
+      - name: players
+      - name: appearances
+      - name: player_valuations
+      - name: clubs
+      - name: competitions

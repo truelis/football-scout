@@ -1,0 +1,18 @@
+# App- and backtest-level settings.
+#
+# NOTE: all MODEL tunables (weights, thresholds, age curve, price cap) live in
+# transform/dbt_project.yml under `vars:` — that is dbt's idiomatic home for
+# them and keeps them in one place rather than two. Override at runtime with:
+#   dbt build --vars '{max_market_value_eur: 3000000, max_age: 21}'
+#
+# This file is for things dbt does not own.
+
+app:
+  default_position_filter: [Attack, Midfield]
+  rows_displayed: 200
+
+backtest:            # Phase 3
+  as_of_dates: ['2022-01-01', '2023-01-01', '2024-01-01']
+  holdout_date: '2023-07-01'   # never tune against this one
+  horizon_months: 24
+  control_match_on: [position_group, tier, age_band, value_band]

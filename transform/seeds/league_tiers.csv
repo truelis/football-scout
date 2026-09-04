@@ -1,0 +1,13 @@
+competition_id,league_name,tier,strength_coef
+GB1,Premier League,1,1.00
+ES1,LaLiga,1,0.95
+IT1,Serie A,1,0.93
+L1,Bundesliga,1,0.92
+FR1,Ligue 1,1,0.86
+PO1,Liga Portugal,2,0.74
+NL1,Eredivisie,2,0.72
+TR1,Super Lig,2,0.70
+BE1,Pro League,2,0.68
+GR1,Super League Greece,3,0.62
+SC1,Scottish Premiership,3,0.58
+DK1,Danish Superliga,3,0.57

@@ -1,0 +1,14 @@
+version: 2
+models:
+  - name: int_player_season
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [player_id, season, competition_id]
+  - name: int_player_value_history
+    columns:
+      - name: player_id
+        tests: [unique, not_null]
+  - name: int_contract_status
+    columns:
+      - name: player_id
+        tests: [unique, not_null]

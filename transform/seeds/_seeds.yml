@@ -1,0 +1,12 @@
+version: 2
+seeds:
+  - name: league_tiers
+    description: >
+      PLACEHOLDER league strength coefficients, hand-set for Phase 1.
+      Phase 2 replaces this with values derived from Club Elo. Treat every
+      number here as a guess until then - it materially moves the rankings.
+    columns:
+      - name: competition_id
+        tests: [unique, not_null]
+      - name: strength_coef
+        tests: [not_null]

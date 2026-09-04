@@ -1,0 +1,18 @@
+version: 2
+models:
+  - name: stg_tm__players
+    columns:
+      - name: player_id
+        tests: [unique, not_null]
+  - name: stg_tm__appearances
+    columns:
+      - name: appearance_id
+        tests: [unique, not_null]
+  - name: stg_tm__competitions
+    columns:
+      - name: competition_id
+        tests: [unique, not_null]
+  - name: stg_tm__clubs
+    columns:
+      - name: club_id
+        tests: [unique, not_null]

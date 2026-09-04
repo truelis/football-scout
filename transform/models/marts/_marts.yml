@@ -1,0 +1,51 @@
+version: 2
+
+models:
+  - name: dim_player
+    description: Current player profile as of var('as_of_date').
+    columns:
+      - name: player_id
+        tests: [unique, not_null]
+      - name: age
+        tests:
+          - dbt_utils.accepted_range: {min_value: 14, max_value: 50}
+
+  - name: fct_player_season
+    description: Player x season x competition production, with league context.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [player_id, season, competition_id]
+
+  - name: mart_player_scores
+    description: >
+      Three-axis scores with all inputs retained. One row per eligible player
+      for the reference season.
+    columns:
+      - name: player_id
+        tests: [unique, not_null]
+      - name: performance_score
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 100}
+      - name: availability_score
+        tests:
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 100}
+      - name: confidence
+        tests:
+          - accepted_values: {values: ['medium', 'low']}
+
+  - name: fct_player_valuations
+    description: Market value time series per player, for the app's value chart.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [player_id, valuation_date]
+
+  - name: mart_shortlist
+    description: Filtered, ranked shortlist. The app's landing table.
+    columns:
+      - name: player_id
+        tests: [unique, not_null]
+      - name: composite_score
+        tests:
+          - not_null
+          - dbt_utils.accepted_range: {min_value: 0, max_value: 100}

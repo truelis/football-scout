@@ -1,0 +1,13 @@
+football_scout:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ../data/scout.duckdb
+      threads: 4
+      # Attach the downloaded transfermarkt-datasets file READ-ONLY.
+      # We never write to it; refreshing the data = re-downloading the file.
+      attach:
+        - path: ../data/transfermarkt-datasets.duckdb
+          alias: tm
+          read_only: true
