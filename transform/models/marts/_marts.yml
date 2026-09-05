@@ -2,13 +2,26 @@ version: 2
 
 models:
   - name: dim_player
-    description: Current player profile as of var('as_of_date').
+    description: >
+      Current player profile as of var('as_of_date'). This is the FULL upstream
+      universe - every player the dataset has ever carried, including retirees
+      going back to the 1960s. It is not the scouting population; do not assert
+      scouting-population properties here.
     columns:
       - name: player_id
         tests: [unique, not_null]
       - name: age
+        description: >
+          Floor only, deliberately. An upper bound belongs on mart_player_scores,
+          not here: 104 retired players are already over 50 (oldest b. 1968) and
+          every one of them ages by a year each time as_of_date advances, so any
+          ceiling on this model is a test that rots on a timer. The floor still
+          catches the failure that matters - a corrupt or future date_of_birth.
+          Nulls pass: 49 players genuinely have no DOB upstream and
+          accepted_range ignores nulls, so this is not a completeness check.
         tests:
-          - dbt_utils.accepted_range: {min_value: 14, max_value: 50}
+          - dbt_utils.accepted_range:
+              arguments: {min_value: 14}
 
   - name: fct_player_season
     description: Player x season x competition production, with league context.
@@ -23,6 +36,17 @@ models:
     columns:
       - name: player_id
         tests: [unique, not_null]
+      - name: age
+        description: >
+          The scouting-population age assertion, moved here from dim_player where
+          it was being applied to the whole historical archive. Every scored
+          player has cleared the minutes threshold in the reference season, so a
+          plausible playing age is a real invariant here rather than an
+          assumption about an archive.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              arguments: {min_value: 14, max_value: 50}
       - name: performance_score
         tests:
           - not_null
