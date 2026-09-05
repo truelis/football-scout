@@ -10,3 +10,18 @@ seeds:
         tests: [unique, not_null]
       - name: strength_coef
         tests: [not_null]
+
+  - name: player_id_overrides
+    description: >
+      Manual Understat -> Transfermarkt fixes. The escape hatch of SPEC 4.2 step
+      4: entity resolution will always have a tail no heuristic reaches, and a
+      seed is cheaper and more auditable than loosening the fuzzy threshold for
+      everyone. Empty is the correct starting state - add a row only when a
+      specific player is provably mismatched, with the reason in `note`.
+    config:
+      column_types:
+        understat_player_id: bigint
+        player_id: bigint
+    columns:
+      - name: understat_player_id
+        tests: [unique]

@@ -13,3 +13,15 @@ sources:
       - name: player_valuations
       - name: clubs
       - name: competitions
+
+  - name: understat
+    description: >
+      Understat player-season stats, landed to parquet by ingest/understat.py.
+      Top five leagues plus Russia only - that is Understat's entire coverage,
+      not a filter we chose. Read as an external parquet rather than attached,
+      so refreshing the data means re-running the ingest, never a dbt write.
+    schema: main
+    meta:
+      external_location: "../data/raw/{name}.parquet"
+    tables:
+      - name: understat_player_season

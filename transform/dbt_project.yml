@@ -70,6 +70,12 @@ vars:
   w_trajectory: 0.35
   w_availability: 0.20
 
+  # -- entity resolution health. SPEC 4.2 makes coverage THE metric for this
+  #    layer: without a failing test it rots silently as names drift upstream.
+  understat_fuzzy_threshold: 90
+  understat_coverage_min_pct: 90
+  understat_coverage_min_minutes: 600
+
   # -- contract leverage thresholds, in months remaining
   contract_leverage_months: 18
   contract_bargain_months: 12

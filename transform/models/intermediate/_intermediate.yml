@@ -19,3 +19,29 @@ models:
     columns:
       - name: player_id
         tests: [unique, not_null]
+  - name: int_player_identity
+    config:
+      # Surfaces the project var to the Python model - dbt.config.get() reads
+      # model config, not vars, so without this the var would sit unused and
+      # the threshold would silently stay at the in-code default.
+      fuzzy_threshold: "{{ var('understat_fuzzy_threshold') }}"
+    description: >
+      Understat -> Transfermarkt player map, one row per understat_player_id.
+      Built by a Python model because the fuzzy passes need rapidfuzz. See
+      int_player_identity.py for the four-pass strategy and why the constraint
+      is league+season rather than club+season.
+    columns:
+      - name: understat_player_id
+        tests: [unique, not_null]
+      - name: player_id
+        description: >
+          Unique as well as not-null: two Understat players resolving to one
+          Transfermarkt player means at least one is a namesake collision, and
+          a wrong match injects another player's xG.
+        tests: [unique, not_null]
+      - name: match_method
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['exact_name_league_season', 'fuzzy_name_league_season',
+                         'fuzzy_name_birth_year', 'manual_override']
