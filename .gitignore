@@ -8,3 +8,10 @@ __pycache__/
 .venv
 .env
 transform/.user.yml
+
+# macOS custom-folder-icon files. Google Drive sets a custom icon on every
+# folder it syncs, and macOS stores that as a file literally named "Icon\r"
+# (Icon + carriage return) whose image lives in a resource fork - so git sees
+# a 0-byte file and happily commits it. 15 were already tracked.
+Icon
+.DS_Store

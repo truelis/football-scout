@@ -331,7 +331,7 @@ The `x == x` NaN self-comparison idiom is correct for float NaN but breaks on pa
 **The shortlist hid 40% of itself on load.**
 
 ```python
-max_age = st.slider("Max age", 16, 30, int(df["age"].max()))   # int(22.97) -> 22
+max_age = st.slider("Max age", 16, 30, int(df["age"].max()))  # int(22.97) -> 22
 ```
 
 `age` is fractional, so the default truncated to 22 and dropped the 87 players between 22.01 and

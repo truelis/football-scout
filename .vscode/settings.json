@@ -1,0 +1,12 @@
+{
+  // Google Drive recreates macOS "Icon\r" files in every synced folder.
+  // They cannot be switched off, so hide them rather than stare at them.
+  "files.exclude": {
+    "**/Icon\r": true,
+    "**/.DS_Store": true
+  },
+  "files.watcherExclude": {
+    "**/Icon\r": true
+  },
+  "sqlfluff.dialect": "duckdb"
+}

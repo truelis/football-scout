@@ -6,18 +6,18 @@
 -- top-flight domestic leagues from cups, super cups and European competitions.
 -- Kept as a derived boolean so downstream models get the concept, not the
 -- encoding.
-select
+SELECT
     competition_id,
     competition_code,
-    name                                        as competition_name,
+    name AS competition_name,
     country_id,
     country_name,
-    type                                        as competition_type,
+    type AS competition_type,
     sub_type,
     domestic_league_code,
     confederation,
     total_clubs,
     type = 'domestic_league'
-      and sub_type = 'first_tier'               as is_first_tier_domestic_league
-from {{ source('tm', 'competitions') }}
-where competition_id is not null
+    AND sub_type = 'first_tier' AS is_first_tier_domestic_league
+FROM {{ source('tm', 'competitions') }}
+WHERE competition_id IS NOT NULL

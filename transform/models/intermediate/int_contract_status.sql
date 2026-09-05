@@ -1,17 +1,20 @@
 -- Contract runway as of var('as_of_date'). One of the strongest and cheapest
 -- signals in the dataset: under ~18 months, the selling club loses leverage.
-select
+SELECT
     player_id,
     contract_expiration_date,
-    case when contract_expiration_date is not null
-         then datediff('month', date '{{ var("as_of_date") }}', contract_expiration_date)
-    end as contract_months_remaining,
-    case
-        when contract_expiration_date is null then 'unknown'
-        when datediff('month', date '{{ var("as_of_date") }}', contract_expiration_date)
-             <= {{ var('contract_bargain_months') }} then 'expiring'
-        when datediff('month', date '{{ var("as_of_date") }}', contract_expiration_date)
-             <= {{ var('contract_leverage_months') }} then 'leverage'
-        else 'secure'
-    end as contract_status
-from {{ ref('stg_tm__players') }}
+    CASE
+        WHEN contract_expiration_date IS NOT NULL
+            THEN DATEDIFF('month', DATE '{{ var("as_of_date") }}', contract_expiration_date)
+    END AS contract_months_remaining,
+    CASE
+        WHEN contract_expiration_date IS NULL THEN 'unknown'
+        WHEN
+            DATEDIFF('month', DATE '{{ var("as_of_date") }}', contract_expiration_date)
+            <= {{ var('contract_bargain_months') }} THEN 'expiring'
+        WHEN
+            DATEDIFF('month', DATE '{{ var("as_of_date") }}', contract_expiration_date)
+            <= {{ var('contract_leverage_months') }} THEN 'leverage'
+        ELSE 'secure'
+    END AS contract_status
+FROM {{ ref('stg_tm__players') }}

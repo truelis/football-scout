@@ -1,59 +1,74 @@
 -- Market value time series with trailing deltas, evaluated as of var('as_of_date').
 -- Every window is bounded by as_of_date so the Phase 3 backtest can rewind
 -- this model without leaking future values.
-with vals as (
-    select *
-    from {{ ref('stg_tm__player_valuations') }}
-    where valuation_date <= date '{{ var("as_of_date") }}'
+WITH vals AS (
+    SELECT *
+    FROM {{ ref('stg_tm__player_valuations') }}
+    WHERE valuation_date <= DATE '{{ var("as_of_date") }}'
 ),
 
-ranked as (
-    select
+ranked AS (
+    SELECT
         *,
-        row_number() over (partition by player_id order by valuation_date desc) as rn
-    from vals
+        ROW_NUMBER() OVER (PARTITION BY player_id ORDER BY valuation_date DESC) AS rn
+    FROM vals
 ),
 
-current_value as (
-    select player_id, market_value_eur as value_now, valuation_date as value_now_date
-    from ranked where rn = 1
+current_value AS (
+    SELECT
+        player_id,
+        market_value_eur AS value_now,
+        valuation_date AS value_now_date
+    FROM ranked
+    WHERE rn = 1
 ),
 
-value_12m as (
-    select distinct on (player_id)
-        player_id, market_value_eur as value_12m_ago
-    from vals
-    where valuation_date <= date '{{ var("as_of_date") }}' - interval 12 month
-    order by player_id, valuation_date desc
+value_12m AS (
+    SELECT DISTINCT ON (player_id)
+        player_id,
+        market_value_eur AS value_12m_ago
+    FROM vals
+    WHERE valuation_date <= DATE '{{ var("as_of_date") }}' - INTERVAL 12 MONTH
+    ORDER BY player_id ASC, valuation_date DESC
 ),
 
-value_24m as (
-    select distinct on (player_id)
-        player_id, market_value_eur as value_24m_ago
-    from vals
-    where valuation_date <= date '{{ var("as_of_date") }}' - interval 24 month
-    order by player_id, valuation_date desc
+value_24m AS (
+    SELECT DISTINCT ON (player_id)
+        player_id,
+        market_value_eur AS value_24m_ago
+    FROM vals
+    WHERE valuation_date <= DATE '{{ var("as_of_date") }}' - INTERVAL 24 MONTH
+    ORDER BY player_id ASC, valuation_date DESC
 ),
 
-peak as (
-    select player_id, max(market_value_eur) as peak_value
-    from vals group by 1
+peak AS (
+    SELECT
+        player_id,
+        MAX(market_value_eur) AS peak_value
+    FROM vals
+    GROUP BY player_id
 )
 
-select
+SELECT
     c.player_id,
     c.value_now,
     c.value_now_date,
     v12.value_12m_ago,
     v24.value_24m_ago,
     p.peak_value,
-    case when v12.value_12m_ago > 0
-         then c.value_now / v12.value_12m_ago - 1 end       as value_growth_12m,
-    case when v24.value_24m_ago > 0
-         then power(c.value_now / v24.value_24m_ago, 0.5) - 1 end as value_cagr_24m,
-    case when p.peak_value > 0
-         then c.value_now / p.peak_value end                as value_vs_peak
-from current_value c
-left join value_12m v12 using (player_id)
-left join value_24m v24 using (player_id)
-left join peak      p   using (player_id)
+    CASE
+        WHEN v12.value_12m_ago > 0
+            THEN c.value_now / v12.value_12m_ago - 1
+    END AS value_growth_12m,
+    CASE
+        WHEN v24.value_24m_ago > 0
+            THEN POWER(c.value_now / v24.value_24m_ago, 0.5) - 1
+    END AS value_cagr_24m,
+    CASE
+        WHEN p.peak_value > 0
+            THEN c.value_now / p.peak_value
+    END AS value_vs_peak
+FROM current_value AS c
+LEFT JOIN value_12m AS v12 USING (player_id)
+LEFT JOIN value_24m AS v24 USING (player_id)
+LEFT JOIN peak AS p USING (player_id)

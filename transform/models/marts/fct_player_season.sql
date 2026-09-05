@@ -1,14 +1,17 @@
 -- Player x season production, joined to league context. The grain the
 -- scoring model reads from.
-select
+SELECT
     s.player_id,
     s.season,
     s.competition_id,
+    s.competition_type,
+    s.competition_sub_type,
+    s.is_domestic_league,
     lt.league_name,
     lt.tier,
     lt.strength_coef,
     d.position_group,
-    d.age - (date_part('year', date '{{ var("as_of_date") }}') - s.season) as age_in_season,
+    d.age - (DATE_PART('year', DATE '{{ var("as_of_date") }}') - s.season) AS age_in_season,
     s.appearances,
     s.substantial_appearances,
     s.minutes_played,
@@ -18,14 +21,18 @@ select
     s.goals_per90,
     s.assists_per90,
     s.ga_per90,
-    -- league-adjusted output: the core Phase 1 comparability fix
-    s.ga_per90 * lt.strength_coef as ga_per90_adj
-from {{ ref('int_player_season') }} s
-left join {{ ref('league_tiers') }} lt on s.competition_id = lt.competition_id
-left join {{ ref('dim_player') }} d using (player_id)
--- No `where lt.competition_id is not null` here, deliberately. That silently
--- dropped any league missing from the seed - which is exactly how RU1 and UKR1
--- (~7,300 appearances each) went unnoticed. int_player_season now restricts to
--- first-tier domestic leagues, so every row reaching this model SHOULD have a
--- tier; a null one means the seed is behind the data and the not_null test on
--- `tier` fails the build rather than quietly shrinking the fact table.
+    -- league-adjusted output: the core Phase 1 comparability fix.
+    -- Null for cup and European rows, which have no league coefficient.
+    s.ga_per90 * lt.strength_coef AS ga_per90_adj
+FROM {{ ref('int_player_season') }} AS s
+LEFT JOIN {{ ref('league_tiers') }} AS lt ON s.competition_id = lt.competition_id
+LEFT JOIN {{ ref('dim_player') }} AS d USING (player_id)
+-- No filter at all here, deliberately. This model is the full player x season
+-- x competition record: cups and European ties included, each carrying
+-- is_domestic_league so a consumer can choose its own sample.
+--
+-- tier and strength_coef are therefore null for cup rows, which is correct - a
+-- cup has no league strength. The invariant worth testing is narrower: every
+-- DOMESTIC row must have a tier. tests/assert_every_scored_league_has_a_tier
+-- enforces that, so a league with data but no seed row fails the build instead
+-- of being silently dropped - which is exactly how RU1 and UKR1 went unnoticed.

@@ -1,6 +1,13 @@
 version: 2
 models:
   - name: int_player_season
+    description: >
+      Player x season x competition totals for EVERY competition - nothing is
+      filtered here. competition_type / competition_sub_type / is_domestic_league
+      describe each row so downstream models can pick their own sample.
+    columns:
+      - name: is_domestic_league
+        tests: [not_null]
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [player_id, season, competition_id]

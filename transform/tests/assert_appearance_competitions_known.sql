@@ -12,10 +12,10 @@
 -- of being silently dropped by that same filter.
 {{ config(severity = 'warn') }}
 
-select
+SELECT
     a.competition_id,
-    count(*) as appearance_rows
-from {{ ref('stg_tm__appearances') }} a
-left join {{ ref('stg_tm__competitions') }} c using (competition_id)
-where c.competition_id is null
-group by 1
+    COUNT(*) AS appearance_rows
+FROM {{ ref('stg_tm__appearances') }} AS a
+LEFT JOIN {{ ref('stg_tm__competitions') }} AS c ON a.competition_id = c.competition_id
+WHERE c.competition_id IS NULL
+GROUP BY 1

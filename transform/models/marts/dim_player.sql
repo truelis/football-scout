@@ -1,8 +1,8 @@
-select
+SELECT
     p.player_id,
     p.player_name,
     p.date_of_birth,
-    datediff('day', p.date_of_birth, date '{{ var("as_of_date") }}') / 365.25 as age,
+    DATEDIFF('day', p.date_of_birth, DATE '{{ var("as_of_date") }}') / 365.25 AS age,
     p.position_group,
     p.sub_position,
     p.foot,
@@ -19,7 +19,7 @@ select
     c.contract_status,
     p.current_market_value_eur,
     p.highest_market_value_eur,
-    p.current_market_value_eur * {{ var('fee_multiplier') }} as estimated_fee_eur
-from {{ ref('stg_tm__players') }} p
-left join {{ ref('int_contract_status') }} c using (player_id)
-left join {{ ref('league_tiers') }} lt on p.competition_id = lt.competition_id
+    p.current_market_value_eur * {{ var('fee_multiplier') }} AS estimated_fee_eur
+FROM {{ ref('stg_tm__players') }} AS p
+LEFT JOIN {{ ref('int_contract_status') }} AS c USING (player_id)
+LEFT JOIN {{ ref('league_tiers') }} AS lt ON p.competition_id = lt.competition_id

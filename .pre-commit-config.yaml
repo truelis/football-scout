@@ -1,0 +1,45 @@
+# Run once per clone:  uv run pre-commit install
+# Run over everything: uv run pre-commit run --all-files
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+
+  # SQL: autoformat first, then fail on whatever could not be fixed.
+  - repo: local
+    hooks:
+      - id: sqlfluff-fix
+        name: sqlfluff fix (dbt SQL)
+        language: system
+        entry: uv run sqlfluff fix --force
+        files: ^transform/models/.*\.sql$|^transform/tests/.*\.sql$
+        pass_filenames: true
+      - id: sqlfluff-lint
+        name: sqlfluff lint (dbt SQL)
+        language: system
+        entry: uv run sqlfluff lint
+        files: ^transform/models/.*\.sql$|^transform/tests/.*\.sql$
+        pass_filenames: true
+
+  # Python: ruff is already a dev dependency.
+  - repo: local
+    hooks:
+      - id: ruff-fix
+        name: ruff (fix)
+        language: system
+        entry: uv run ruff check --fix
+        files: \.py$
+        pass_filenames: true
+      - id: ruff-format
+        name: ruff format
+        language: system
+        entry: uv run ruff format
+        files: \.py$
+        pass_filenames: true

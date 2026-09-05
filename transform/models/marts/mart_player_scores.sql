@@ -1,71 +1,84 @@
 -- Three independent axes, each 0-100, plus a composite.
 -- EVERY input is retained on the row so the UI can explain a ranking.
-with ref_season as (
-    select * from {{ ref('fct_player_season') }}
-    where season = {{ var('reference_season') }}
+-- The SCORING SAMPLE is domestic-league only. Cup and European rows exist in
+-- fct_player_season and are deliberately kept there - they are squad-role and
+-- level-progression evidence for Phases 2-3 - but they must not be pooled into
+-- a per-90 rate, or a player's output would depend on how far his club ran in
+-- a cup. This is the one place that choice is made.
+WITH ref_season AS (
+    SELECT * FROM {{ ref('fct_player_season') }}
+    WHERE
+        season = {{ var('reference_season') }}
+        AND is_domestic_league
 ),
 
-prev_season as (
-    select player_id,
-           sum(minutes_played) as prev_minutes,
-           sum(goal_contributions) * 90.0
-             / nullif(sum(minutes_played), 0) as prev_ga_per90
-    from {{ ref('fct_player_season') }}
-    where season = {{ var('reference_season') }} - 1
-    group by 1
+prev_season AS (
+    SELECT
+        player_id,
+        SUM(minutes_played) AS prev_minutes,
+        SUM(goal_contributions) * 90.0
+        / NULLIF(SUM(minutes_played), 0) AS prev_ga_per90
+    FROM {{ ref('fct_player_season') }}
+    WHERE
+        season = {{ var('reference_season') }} - 1
+        AND is_domestic_league
+    GROUP BY 1
 ),
 
 -- collapse multi-competition rows to one row per player per season
-agg as (
-    select
+agg AS (
+    SELECT
         player_id,
-        sum(minutes_played)                                as minutes_played,
-        sum(appearances)                                   as appearances,
-        sum(substantial_appearances)                       as substantial_appearances,
-        sum(goals)                                         as goals,
-        sum(assists)                                       as assists,
-        sum(goal_contributions)                            as goal_contributions,
-        max(position_group)                                as position_group,
-        max(tier)                                          as tier,
-        max(strength_coef)                                 as strength_coef,
-        sum(goal_contributions) * 90.0
-          / nullif(sum(minutes_played), 0)                 as ga_per90,
-        sum(goal_contributions) * 90.0
-          / nullif(sum(minutes_played), 0) * max(strength_coef) as ga_per90_adj
-    from ref_season
-    group by 1
+        SUM(minutes_played) AS minutes_played,
+        SUM(appearances) AS appearances,
+        SUM(substantial_appearances) AS substantial_appearances,
+        SUM(goals) AS goals,
+        SUM(assists) AS assists,
+        SUM(goal_contributions) AS goal_contributions,
+        MAX(position_group) AS position_group,
+        MAX(tier) AS tier,
+        MAX(strength_coef) AS strength_coef,
+        SUM(goal_contributions) * 90.0
+        / NULLIF(SUM(minutes_played), 0) AS ga_per90,
+        SUM(goal_contributions) * 90.0
+        / NULLIF(SUM(minutes_played), 0) * MAX(strength_coef) AS ga_per90_adj
+    FROM ref_season
+    GROUP BY 1
 ),
 
-eligible as (
-    select a.*, p.prev_minutes, p.prev_ga_per90
-    from agg a
-    left join prev_season p using (player_id)
-    where a.minutes_played >= {{ var('min_minutes_if_trending') }}
-      -- Goalkeepers cannot be scored on attacking output and Phase 1 has no
-      -- goalkeeping metrics. Excluding them beats ranking them on noise.
-      and a.position_group != 'Goalkeeper'
+eligible AS (
+    SELECT
+        a.*,
+        p.prev_minutes,
+        p.prev_ga_per90
+    FROM agg AS a
+    LEFT JOIN prev_season AS p USING (player_id)
+    WHERE a.minutes_played >= {{ var('min_minutes_if_trending') }}
+    -- Goalkeepers cannot be scored on attacking output and Phase 1 has no
+    -- goalkeeping metrics. Excluding them beats ranking them on noise.
+    AND a.position_group != 'Goalkeeper'
 ),
 
 -- Percentiles are computed WITHIN position group and league tier. A percentile
 -- against "all players" is decorative; against the right peer group it is a
 -- scouting statement.
-pct as (
-    select
+pct AS (
+    SELECT
         *,
         -- Percentile within POSITION GROUP across all leagues, on the
         -- league-ADJUSTED metric. Partitioning by tier as well would cancel
         -- out strength_coef entirely - a tier-3 player would be measured only
         -- against other tier-3 players and the adjustment would do nothing.
-        percent_rank() over (
-            partition by position_group order by ga_per90_adj
-        ) as pct_output,
-        percent_rank() over (
-            partition by position_group order by minutes_played
-        ) as pct_minutes
-    from eligible
+        PERCENT_RANK() OVER (
+            PARTITION BY position_group ORDER BY ga_per90_adj
+        ) AS pct_output,
+        PERCENT_RANK() OVER (
+            PARTITION BY position_group ORDER BY minutes_played
+        ) AS pct_minutes
+    FROM eligible
 )
 
-select
+SELECT
     d.player_id,
     d.player_name,
     d.age,
@@ -100,34 +113,39 @@ select
     v.value_vs_peak,
 
     -- ---- AXIS 1: performance ----
-    round(100 * (0.75 * p.pct_output + 0.25 * p.pct_minutes), 1) as performance_score,
+    ROUND(100 * (0.75 * p.pct_output + 0.25 * p.pct_minutes), 1) AS performance_score,
 
     -- ---- AXIS 2: trajectory ----
     -- age curve: gaussian around peak_age, so younger-than-peak scores high
-    round(100 * exp(-power(d.age - {{ var('peak_age') }}, 2)
-                    / (2 * power({{ var('age_curve_width') }}, 2))), 1) as age_score,
-    round(100 * least(1.0, greatest(0.0,
-        0.5 + 0.5 * coalesce(
-            (p.minutes_played - p.prev_minutes) / nullif(p.prev_minutes, 0), 0)
-    )), 1) as minutes_trend_score,
-    round(100 * least(1.0, greatest(0.0,
-        0.5 + coalesce(v.value_growth_12m, 0)
-    )), 1) as value_trend_score,
+    ROUND(100 * EXP(
+        -POWER(d.age - {{ var('peak_age') }}, 2)
+        / (2 * POWER({{ var('age_curve_width') }}, 2))
+    ), 1) AS age_score,
+    ROUND(100 * LEAST(1.0, GREATEST(
+        0.0,
+        0.5 + 0.5 * COALESCE(
+            (p.minutes_played - p.prev_minutes) / NULLIF(p.prev_minutes, 0), 0
+        )
+    )), 1) AS minutes_trend_score,
+    ROUND(100 * LEAST(1.0, GREATEST(
+        0.0,
+        0.5 + COALESCE(v.value_growth_12m, 0)
+    )), 1) AS value_trend_score,
 
     -- ---- AXIS 3: availability ----
-    round(100 * case
-        when d.contract_months_remaining is null then 0.40
-        when d.contract_months_remaining <= {{ var('contract_bargain_months') }} then 1.00
-        when d.contract_months_remaining <= {{ var('contract_leverage_months') }} then 0.75
-        when d.contract_months_remaining <= 30 then 0.45
-        else 0.25
-    end, 1) as availability_score,
+    ROUND(100 * CASE
+        WHEN d.contract_months_remaining IS NULL THEN 0.40
+        WHEN d.contract_months_remaining <= {{ var('contract_bargain_months') }} THEN 1.00
+        WHEN d.contract_months_remaining <= {{ var('contract_leverage_months') }} THEN 0.75
+        WHEN d.contract_months_remaining <= 30 THEN 0.45
+        ELSE 0.25
+    END, 1) AS availability_score,
 
     -- confidence flag: Phase 1 has NO defensive or goalkeeping metrics.
     -- Do not let a tidy number imply we measured something we did not.
-    case when d.position_group in ('Attack', 'Midfield') then 'medium' else 'low' end
-        as confidence
+    CASE WHEN d.position_group IN ('Attack', 'Midfield') THEN 'medium' ELSE 'low' END
+        AS confidence
 
-from pct p
-join {{ ref('dim_player') }} d using (player_id)
-left join {{ ref('int_player_value_history') }} v using (player_id)
+FROM pct AS p
+INNER JOIN {{ ref('dim_player') }} AS d USING (player_id)
+LEFT JOIN {{ ref('int_player_value_history') }} AS v USING (player_id)

@@ -7,6 +7,7 @@ existing.
 
 Refreshing the data == re-downloading this file. dbt attaches it READ-ONLY.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -71,16 +72,22 @@ def download(url: str, tmp: Path) -> None:
                 done += len(chunk)
                 if total:
                     pct = 100 * done / total
-                    print(f"\r  downloading… {done/1e6:,.0f}/{total/1e6:,.0f} MB "
-                          f"({pct:.0f}%)", end="", flush=True)
+                    print(
+                        f"\r  downloading… {done / 1e6:,.0f}/{total / 1e6:,.0f} MB ({pct:.0f}%)",
+                        end="",
+                        flush=True,
+                    )
         print()
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--url", default=URL)
-    ap.add_argument("--force", action="store_true",
-                    help="re-download even if a valid file is already present")
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="re-download even if a valid file is already present",
+    )
     args = ap.parse_args()
 
     if DEST.exists() and not args.force:
@@ -95,10 +102,16 @@ def main() -> int:
         download(args.url, tmp)
         print("validating…")
         validate(tmp)
-    except Exception as exc:
+    # Blind except is deliberate: ANY failure - network, disk, a validate()
+    # assertion - must delete the temp file and leave the known-good download
+    # untouched. Narrowing this would let an unanticipated error strand a
+    # half-written .tmp and, worse, look like success.
+    except Exception as exc:  # noqa: BLE001
         tmp.unlink(missing_ok=True)
-        print(f"\nERROR: refresh failed, existing data left untouched: {exc}",
-              file=sys.stderr)
+        print(
+            f"\nERROR: refresh failed, existing data left untouched: {exc}",
+            file=sys.stderr,
+        )
         return 1
 
     shutil.move(str(tmp), str(DEST))

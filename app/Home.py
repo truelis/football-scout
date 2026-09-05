@@ -1,4 +1,5 @@
 """Shortlist view - the app's landing page."""
+
 import math
 from pathlib import Path
 
@@ -48,8 +49,13 @@ with st.sidebar:
     # and hid the 87 players between 22.01 and 22.97 - 40% of the shortlist,
     # invisible on load with no indication anything had been filtered.
     max_age = st.slider("Max age", 16, 30, math.ceil(df["age"].max()))
-    max_val = st.slider("Max market value (€m)", 0.0, 10.0,
-                        float(df["current_market_value_eur"].max() / 1e6), 0.25)
+    max_val = st.slider(
+        "Max market value (€m)",
+        0.0,
+        10.0,
+        float(df["current_market_value_eur"].max() / 1e6),
+        0.25,
+    )
     min_mins = st.slider("Min minutes", 0, 3400, 900, 100)
     # Left at 900 deliberately - it is the owner's call, not a bug to fix here.
     # But it silently overrides the mart's own eligibility rule, which admits
@@ -59,9 +65,11 @@ with st.sidebar:
         f"The shortlist itself admits 600+ minutes when rising. "
         f"{int((df['minutes_played'] < 900).sum())} players sit in the 600–899 band."
     )
-    contract = st.multiselect("Contract status",
-                              sorted(df["contract_status"].dropna().unique()),
-                              default=sorted(df["contract_status"].dropna().unique()))
+    contract = st.multiselect(
+        "Contract status",
+        sorted(df["contract_status"].dropna().unique()),
+        default=sorted(df["contract_status"].dropna().unique()),
+    )
     st.divider()
     st.caption(
         "**Confidence**: attackers and midfielders are scored on goal "
@@ -83,8 +91,12 @@ f = df[
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Players", f"{len(f):,}")
 c2.metric("Median age", f"{f['age'].median():.1f}" if len(f) else "—")
-c3.metric("Median value", f"€{f['current_market_value_eur'].median()/1e6:.2f}m" if len(f) else "—")
+c3.metric(
+    "Median value",
+    f"€{f['current_market_value_eur'].median() / 1e6:.2f}m" if len(f) else "—",
+)
 c4.metric("Expiring ≤12m", f"{(f['contract_status'] == 'expiring').sum():,}")
+
 
 # ---------------------------------------------------------------- one-line read
 def tag(r) -> str:
@@ -105,11 +117,25 @@ def tag(r) -> str:
 if len(f):
     f["read"] = f.apply(tag, axis=1)
 
-cols = ["rank_in_position", "player_name", "age", "position_group", "current_club_name",
-        "league_name", "current_market_value_eur", "estimated_fee_eur",
-        "contract_months_remaining", "minutes_played", "ga_per90",
-        "performance_score", "trajectory_score", "availability_score",
-        "composite_score", "confidence", "read"]
+cols = [
+    "rank_in_position",
+    "player_name",
+    "age",
+    "position_group",
+    "current_club_name",
+    "league_name",
+    "current_market_value_eur",
+    "estimated_fee_eur",
+    "contract_months_remaining",
+    "minutes_played",
+    "ga_per90",
+    "performance_score",
+    "trajectory_score",
+    "availability_score",
+    "composite_score",
+    "confidence",
+    "read",
+]
 
 st.dataframe(
     f[cols],
@@ -127,14 +153,19 @@ st.dataframe(
         "contract_months_remaining": st.column_config.NumberColumn("Contract (m)"),
         "minutes_played": st.column_config.NumberColumn("Mins"),
         "ga_per90": st.column_config.NumberColumn("G+A/90", format="%.2f"),
-        "performance_score": st.column_config.ProgressColumn("Perf", min_value=0, max_value=100, format="%.0f"),
-        "trajectory_score": st.column_config.ProgressColumn("Traj", min_value=0, max_value=100, format="%.0f"),
-        "availability_score": st.column_config.ProgressColumn("Avail", min_value=0, max_value=100, format="%.0f"),
+        "performance_score": st.column_config.ProgressColumn(
+            "Perf", min_value=0, max_value=100, format="%.0f"
+        ),
+        "trajectory_score": st.column_config.ProgressColumn(
+            "Traj", min_value=0, max_value=100, format="%.0f"
+        ),
+        "availability_score": st.column_config.ProgressColumn(
+            "Avail", min_value=0, max_value=100, format="%.0f"
+        ),
         "composite_score": st.column_config.NumberColumn("Score", format="%.1f"),
         "confidence": "Conf.",
         "read": "Read",
     },
 )
 
-st.download_button("Download CSV", f[cols].to_csv(index=False),
-                   "shortlist.csv", "text/csv")
+st.download_button("Download CSV", f[cols].to_csv(index=False), "shortlist.csv", "text/csv")

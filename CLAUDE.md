@@ -92,13 +92,35 @@ silently overrode the repo copy and sent dbt to `~/.dbt` — the symptom was
 removed. **Don't re-add it**; if a sibling project ever needs a different profiles dir, pass
 `--profiles-dir` on that project's commands rather than exporting a global.
 
-### Google Drive `Icon\r` files break the venv
+### Code style — enforced, not debated
 
-Drive scatters macOS custom-icon files (`Icon` + CR) through synced folders, and `jsonschema`
-crashes iterating a directory containing one — `dbt deps` dies with `NotADirectoryError`. Fix:
+SQL is formatted by **sqlfluff** (`.sqlfluff`), Python by **ruff** (`[tool.ruff]` in
+`pyproject.toml`), both wired into **pre-commit**. Keywords upper case, identifiers
+`lower_snake`, no alias padding.
 
 ```bash
-find .venv -name 'Icon?' -delete
+uv run pre-commit install        # once per clone
+uv run pre-commit run --all-files
 ```
 
-This recurs on every sync. Exclude `.venv/` from Drive, or move the venv outside the Drive folder.
+**`sqlfluff fix` is not safe to trust blindly.** It rewrote one `USING (player_id)` to
+`ON a.x = b.x` while leaving the other joins in the same query as `USING`, which made the column
+ambiguous and broke `int_player_value_history` at runtime. Lint passing is not proof the SQL is
+still correct - **always run `dbt build` after a fix pass**, and check row counts.
+
+### Google Drive `Icon\r` files break the venv
+
+macOS stores a folder's custom icon in a file literally named `Icon` + carriage return, with the
+image in a resource fork. Google Drive sets a custom icon on every folder it syncs, so one appears
+in **every directory** — 77 of them here, 15 of which had been committed (git sees a 0-byte file).
+
+There is no Drive setting to stop this. It is handled instead:
+
+- `.gitignore` and `~/.gitignore_global` carry the literal `Icon\r` pattern, so they can never be
+  committed again.
+- `.vscode/settings.json` hides them via `files.exclude`.
+- **The venv lives outside Drive** at `~/venvs/football-scout`, symlinked as `.venv`. This is the
+  one that actually mattered: `jsonschema` crashes iterating a directory containing an `Icon\r`,
+  so `dbt deps` died with `NotADirectoryError` until the venv moved out.
+
+To clear them again after a sync: `find . -name 'Icon?' -delete`
