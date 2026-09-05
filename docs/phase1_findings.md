@@ -283,3 +283,67 @@ brings in position groups that are measurable but weakly so.
   his new league next to scores earned in his old one. `season_strength_coef` now exposes the
   discrepancy; reconciling the display is a UI task.
 - **No xG, no injury or off-field data.** Unchanged, and unchangeable in Phase 1.
+
+---
+
+# Phase 2 (part 1) — Understat and entity resolution
+
+Club Elo was chosen to go first, but **`api.clubelo.com` was returning HTTP 502 on every
+endpoint and date** when Phase 2 began — SPEC §9's "scrapers break without warning", on day one.
+The main site still responded, so this is an upstream outage rather than a block on the approach.
+`ingest/clubelo.py` and the league/team-strength models are the remaining Phase 2 work and will
+run when the API returns; Understat was built first because it was up.
+
+## Entity resolution: 97.49% top-5 coverage
+
+| pass | matched | note |
+|---|---:|---|
+| exact normalised name, within league+season | 3,812 | |
+| fuzzy `token_set_ratio` ≥ 90, within league+season | 283 | |
+| fuzzy name + birth year, league ignored | 4 | mid-season league changes |
+| manual overrides seed | 0 | empty is the correct starting state |
+
+Every league-season is ≥95.5%, against SPEC §4.2's 90% floor, which
+`assert_understat_match_coverage` now enforces as a build failure.
+
+**1:1 is enforced.** 17 Transfermarkt players were initially claimed by more than one Understat
+player — genuine namesakes, three separate Roberto Fernández in La Liga. The best-scoring claim
+wins and the rest are left *unmatched*: an unmatched player simply has no xG, whereas a wrong match
+silently attributes another man's.
+
+An independent check that the matching is real: for matched players, Understat minutes track
+Transfermarkt minutes closely (1048/1028, 1704/1707, 2141/2150). Those are separate sources
+counting the same appearances.
+
+## What xG changes
+
+23 of the 166 shortlisted players are in Understat's coverage (`confidence = high`); the other 143
+are still scored on goal contributions (`confidence = medium`). The gap is the coverage paradox,
+not a defect — the €4m cap puts most of the list outside the top five.
+
+**Where it does reach, it is doing real work.** Pathé Mboup (Ligue 1) has a G+A/90 of 0.09 but an
+npxG+xA/90 of **0.438**, finishing 2.55 goals below npxG. Phase 1's metric called him poor; xG says
+he is creating chances and not converting. That is precisely the distinction the axis exists to
+draw.
+
+**The two metrics are percentiled in separate pools**, partitioned by `has_xg` alongside position.
+Ranking npxG+xA and goal contributions in one pool would put two different metrics on one scale and
+call the result a percentile. Each player is ranked against peers measured the same way, and
+`performance_basis` says which — surfaced in both UI pages. Both pools span 0–100 with similar
+means (48.7 and 51.0), so neither is systematically advantaged.
+
+A player is only scored on xG when Understat covers at least `xg_minutes_coverage_min` (0.5) of his
+domestic minutes; below that the rate describes a fragment of his season rather than the player
+being ranked.
+
+**Finishing vs npxG is retained and never scored.** SPEC §5.2 calls it noise over a single season.
+It appears in the drill-down because it explains a gap between goals and chance quality, and it is
+kept out of every score.
+
+## Still open
+
+- **Club Elo** — blocked on the upstream 502. League and team strength still use the placeholder
+  seed coefficients, which Task 3 found are carrying most of the ranking.
+- **Position-specific metric weighting.** SPEC §5.2 wants different inputs for attackers
+  (npxG/90, shots, key passes) and midfielders (xGBuildup, xGChain). All are retained on the row;
+  the weighting between them is a tuning decision that belongs after Phase 3's backtest, not before.

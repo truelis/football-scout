@@ -27,7 +27,7 @@ What remains free and current:
 | Source | Provides | Coverage | Access |
 |---|---|---|---|
 | **transfermarkt-datasets** (`dcaribou`) | Market values + history, players, clubs, games, appearances, transfers, lineups, events | **14 domestic leagues** (see §2.1.1) + cups and European competitions | Prepared **DuckDB file**, refreshed weekly |
-| **Understat** | xG, xA, npxG, shots, key passes, xGChain, xGBuildup — season and shot level | **Top 5 leagues + Russian Premier League only** | `soccerdata` Python package |
+| **Understat** | xG, xA, npxG, shots, key passes, xGChain, xGBuildup — season and shot level | **Top 5 leagues + Russian Premier League only.** Note `soccerdata` ships the top five ONLY; Russia needs a custom `league_dict` entry (`RFPL`), which `ingest/understat.py` writes on every run | `soccerdata` Python package |
 | **Club Elo** | Team strength ratings, continuously updated | All European clubs | `soccerdata` |
 | **FBref** | Basic stats (goals, assists, minutes, cards), deep history | 100+ competitions | `soccerdata` — basic only |
 | **SoFIFA** | FIFA/EA attribute ratings, potential ratings | Broad | `soccerdata` |

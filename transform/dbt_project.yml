@@ -76,6 +76,12 @@ vars:
   understat_coverage_min_pct: 90
   understat_coverage_min_minutes: 600
 
+  # -- fraction of a player's domestic minutes that Understat must cover before
+  #    he is scored on xG rather than goal contributions. Below it, an
+  #    npxG+xA/90 computed on a minority of his season is a rate for a different
+  #    player than the one being ranked.
+  xg_minutes_coverage_min: 0.5
+
   # -- contract leverage thresholds, in months remaining
   contract_leverage_months: 18
   contract_bargain_months: 12

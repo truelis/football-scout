@@ -94,6 +94,30 @@ fig = go.Figure(
 fig.update_layout(height=220, xaxis_range=[0, 100], margin={"l": 0, "r": 0, "t": 10, "b": 10})
 st.plotly_chart(fig, use_container_width=True)
 
+# ---- advanced stats, where Understat reaches ----
+if row["has_xg"]:
+    st.subheader("Shot quality (Understat)")
+    x = st.columns(6)
+    x[0].metric("npxG", f"{row['np_xg']:.2f}")
+    x[1].metric("xA", f"{row['xa']:.2f}")
+    x[2].metric("npxG+xA/90", f"{row['npxg_xa_per90']:.2f}")
+    x[3].metric("Shots", int(row["shots"]))
+    x[4].metric("Key passes", int(row["key_passes"]))
+    x[5].metric("xGChain", f"{row['xg_chain']:.1f}")
+    delta = row["np_goals_minus_npxg"]
+    st.caption(
+        f"Finishing vs npxG: **{delta:+.2f}**. SPEC §5.2 treats this as noise "
+        "over a single season, not skill — it is shown because it explains a "
+        "gap between goals and chance quality, and it is deliberately kept out "
+        "of every score."
+    )
+else:
+    st.info(
+        "No Understat data — it covers the top five leagues plus Russia and "
+        "nothing else. This player is scored on goal contributions, a coarser "
+        "proxy, and is percentiled only against others measured the same way."
+    )
+
 # ---- market value history ----
 st.subheader("Market value history")
 hist = q(

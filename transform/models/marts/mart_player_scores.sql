@@ -51,7 +51,26 @@ agg AS (
         * (
             SUM(minutes_played * strength_coef)
             / NULLIF(SUM(minutes_played), 0)
-        ) AS ga_per90_adj
+        ) AS ga_per90_adj,
+        -- ---- Understat, where it reaches ----
+        SUM(COALESCE(understat_minutes, 0)) AS understat_minutes,
+        SUM(np_xg) AS np_xg,
+        SUM(xa) AS xa,
+        SUM(shots) AS shots,
+        SUM(key_passes) AS key_passes,
+        SUM(xg_chain) AS xg_chain,
+        SUM(xg_buildup) AS xg_buildup,
+        SUM(np_goals_minus_npxg) AS np_goals_minus_npxg,
+        -- Sum the components, then divide. Averaging two per-90 rates would
+        -- weight a 200-minute spell as heavily as a 2,000-minute one.
+        (SUM(np_xg) + SUM(xa)) * 90.0
+        / NULLIF(SUM(understat_minutes), 0) AS npxg_xa_per90,
+        (SUM(np_xg) + SUM(xa)) * 90.0
+        / NULLIF(SUM(understat_minutes), 0)
+        * (
+            SUM(minutes_played * strength_coef)
+            / NULLIF(SUM(minutes_played), 0)
+        ) AS npxg_xa_per90_adj
     FROM ref_season
     GROUP BY 1
 ),
@@ -60,7 +79,12 @@ eligible AS (
     SELECT
         a.*,
         p.prev_minutes,
-        p.prev_ga_per90
+        p.prev_ga_per90,
+        -- Scored on xG only when Understat covers enough of the season to make
+        -- the rate describe the player being ranked, not a fragment of him.
+        a.npxg_xa_per90_adj IS NOT NULL
+        AND a.understat_minutes
+        >= {{ var('xg_minutes_coverage_min') }} * a.minutes_played AS has_xg
     FROM agg AS a
     LEFT JOIN prev_season AS p USING (player_id)
     WHERE a.minutes_played >= {{ var('min_minutes_if_trending') }}
@@ -85,8 +109,16 @@ pct AS (
         -- league-ADJUSTED metric. Partitioning by tier as well would cancel
         -- out strength_coef entirely - a tier-3 player would be measured only
         -- against other tier-3 players and the adjustment would do nothing.
+        -- Partitioned by has_xg as well as position, deliberately. Half these
+        -- players are measured on npxG+xA and half on goal contributions;
+        -- ranking both in one pool would put two different metrics on one
+        -- scale and call the result a percentile. Each player is ranked
+        -- against peers measured the same way, and performance_basis says
+        -- which. Tier is still NOT in the partition - that would cancel out
+        -- the league coefficient entirely.
         PERCENT_RANK() OVER (
-            PARTITION BY position_group ORDER BY ga_per90_adj
+            PARTITION BY position_group, has_xg
+            ORDER BY COALESCE(npxg_xa_per90_adj, ga_per90_adj)
         ) AS pct_output,
         PERCENT_RANK() OVER (
             PARTITION BY position_group ORDER BY minutes_played
@@ -119,6 +151,23 @@ SELECT
     p.goal_contributions,
     p.ga_per90,
     p.ga_per90_adj,
+    p.has_xg,
+    p.understat_minutes,
+    p.np_xg,
+    p.xa,
+    p.shots,
+    p.key_passes,
+    p.xg_chain,
+    p.xg_buildup,
+    p.npxg_xa_per90,
+    p.npxg_xa_per90_adj,
+    -- Finishing over/underperformance. SPEC 5.2: NOISE over one season, not
+    -- skill. Shown in the drill-down, never fed into a score.
+    p.np_goals_minus_npxg,
+    CASE
+        WHEN p.has_xg THEN 'npxg_xa_per90'
+        ELSE 'goal_contributions_per90'
+    END AS performance_basis,
     -- The minutes-weighted league coefficient actually applied to this player,
     -- retained so the UI can explain the league adjustment instead of the user
     -- having to trust it. Differs from dim_player's tier for anyone who moved
@@ -183,9 +232,14 @@ SELECT
 
     -- confidence flag: Phase 1 has NO defensive or goalkeeping metrics.
     -- Do not let a tidy number imply we measured something we did not.
+    -- Confidence now tracks what was actually MEASURED, not just position.
+    -- A player scored on npxG+xA is on a genuine shot-quality metric; one
+    -- scored on goal contributions is on a coarse proxy, because Understat
+    -- does not cover his league at all.
     CASE
-        WHEN d.position_group IN ('Attack', 'Midfield') THEN 'medium'
-        ELSE 'low'
+        WHEN d.position_group NOT IN ('Attack', 'Midfield') THEN 'low'
+        WHEN p.has_xg THEN 'high'
+        ELSE 'medium'
     END AS confidence
 
 FROM pct AS p

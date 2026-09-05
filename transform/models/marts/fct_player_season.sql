@@ -23,10 +23,36 @@ SELECT
     s.ga_per90,
     -- league-adjusted output: the core Phase 1 comparability fix.
     -- Null for cup and European rows, which have no league coefficient.
-    s.ga_per90 * lt.strength_coef AS ga_per90_adj
+    s.ga_per90 * lt.strength_coef AS ga_per90_adj,
+
+    -- ---- Understat, top five leagues + Russia only ----
+    -- NULL here means "not measured", never zero. Most rows have no xG because
+    -- Understat does not cover their league at all.
+    x.np_xg,
+    x.xa,
+    x.shots,
+    x.key_passes,
+    x.xg_chain,
+    x.xg_buildup,
+    x.np_xg_per90,
+    x.xa_per90,
+    x.npxg_xa_per90,
+    x.shots_per90,
+    x.key_passes_per90,
+    x.xg_chain_per90,
+    x.xg_buildup_per90,
+    x.np_goals_minus_npxg,
+    x.understat_minutes,
+    x.npxg_xa_per90 * lt.strength_coef AS npxg_xa_per90_adj,
+    x.player_id IS NOT NULL AS has_xg
 FROM {{ ref('int_player_season') }} AS s
 LEFT JOIN {{ ref('league_tiers') }} AS lt ON s.competition_id = lt.competition_id
 LEFT JOIN {{ ref('dim_player') }} AS d USING (player_id)
+LEFT JOIN {{ ref('int_player_season_xg') }} AS x
+    ON
+        s.player_id = x.player_id
+        AND s.season = x.season
+        AND s.competition_id = x.competition_id
 -- No filter at all here, deliberately. This model is the full player x season
 -- x competition record: cups and European ties included, each carrying
 -- is_domestic_league so a consumer can choose its own sample.

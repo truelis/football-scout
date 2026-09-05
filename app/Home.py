@@ -78,6 +78,11 @@ with st.sidebar:
         "contributions measures the absence of something he is not paid to do "
         "(42 of 105 had zero). Set `excluded_position_groups` in "
         "`transform/dbt_project.yml` to score them anyway.\n\n"
+        "**Performance basis**: `npxg_xa_per90` means Understat covers his "
+        "league and he is scored on shot quality — confidence `high`. "
+        "`goal_contributions_per90` means it does not, and he is scored on the "
+        "coarser G+A proxy. The two are percentiled in SEPARATE pools: ranking "
+        "them together would put two different metrics on one scale.\n\n"
         "**Trend basis**: `no_prior_season` players have no earlier domestic "
         "season, so their minutes trend is inferred from how much they played, "
         "not from growth. Weaker evidence — read it as such."
@@ -135,6 +140,7 @@ cols = [
     "minutes_played",
     "ga_per90",
     "minutes_trend_basis",
+    "performance_basis",
     "performance_score",
     "trajectory_score",
     "availability_score",
@@ -160,6 +166,7 @@ st.dataframe(
         "minutes_played": st.column_config.NumberColumn("Mins"),
         "ga_per90": st.column_config.NumberColumn("G+A/90", format="%.2f"),
         "minutes_trend_basis": "Trend basis",
+        "performance_basis": "Perf. basis",
         "performance_score": st.column_config.ProgressColumn(
             "Perf", min_value=0, max_value=100, format="%.0f"
         ),
