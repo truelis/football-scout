@@ -36,7 +36,13 @@ agg AS (
         SUM(assists) AS assists,
         SUM(goal_contributions) AS goal_contributions,
         MAX(position_group) AS position_group,
-        MAX(tier) AS tier,
+        -- ARG_MAX, not MAX: the league he actually played most of the season
+        -- in, with tier/name/id all taken from that SAME competition row.
+        -- Independent MAX()es would happily mix a tier from one league with a
+        -- name from another.
+        ARG_MAX(competition_id, minutes_played) AS season_competition_id,
+        ARG_MAX(league_name, minutes_played) AS season_league_name,
+        ARG_MAX(tier, minutes_played) AS season_tier,
         -- MINUTES-WEIGHTED, not MAX. A player splitting a season across two
         -- leagues used to have his COMBINED output multiplied by the stronger
         -- league's coefficient. Omri Gandelman played 1428' in Belgium (0.68)
@@ -133,9 +139,19 @@ SELECT
     d.position_group,
     d.sub_position,
     d.current_club_name,
-    d.league_name,
-    d.tier,
-    d.competition_id,
+    -- The league he was SCORED in, i.e. where he played the most minutes.
+    -- dim_player's league describes his CURRENT club, which for anyone who has
+    -- since transferred is a different competition entirely - 5 shortlisted
+    -- players had a null league here purely because their new club sits outside
+    -- the seeded 14, while their scores came from inside them. Both are kept:
+    -- the scored league is the honest label for a score, the current one is
+    -- what matters for actually signing him.
+    p.season_league_name AS league_name,
+    p.season_tier AS tier,
+    p.season_competition_id AS competition_id,
+    d.league_name AS current_club_league_name,
+    d.tier AS current_club_tier,
+    d.competition_id AS current_club_competition_id,
     d.current_market_value_eur,
     d.estimated_fee_eur,
     d.contract_expiration_date,

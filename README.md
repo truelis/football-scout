@@ -14,9 +14,12 @@ Runs entirely on one machine. No server, no cloud, no cost.
 
 ```bash
 uv sync
+uv run pre-commit install                # sqlfluff + ruff on commit
 
 # 1. download the prepared Transfermarkt dataset (~weekly refreshed upstream)
 uv run python ingest/transfermarkt.py
+uv run python ingest/understat.py        # xG, top 5 leagues + Russia
+uv run python ingest/clubelo.py          # team strength (upstream 502 as of 2026-09-05)
 
 # 2. inspect the real schemas before trusting the staging models
 uv run python scripts/explore_schema.py
@@ -47,13 +50,21 @@ dbt build --vars '{max_market_value_eur: 3000000, max_age: 21}'
 | Source | Provides | Coverage |
 |---|---|---|
 | [transfermarkt-datasets](https://github.com/dcaribou/transfermarkt-datasets) | values + history, appearances, contracts, transfers | broad, weekly refresh |
-| Understat *(Phase 2)* | xG, xA, xGChain | top 5 leagues + Russia only |
-| Club Elo *(Phase 2)* | team strength → league coefficients | European clubs |
+| [Understat](https://understat.com) | xG, xA, npxG, xGChain, xGBuildup | top 5 leagues + Russia only |
+| Club Elo *(pending — upstream outage)* | team strength → league coefficients | European clubs |
 
 FBref lost its Opta licence in January 2026 and no longer carries advanced stats. Anything written before then that suggests otherwise is stale.
 
 ## Status
 
-Phase 1 (Transfermarkt-only shortlist) — scaffolding built and tested against a synthetic fixture. See `PHASE1.md`.
+**Phase 1 complete** — Transfermarkt shortlist, running against the real dataset.
+**Phase 2 part-built** — Understat xG ingested and wired into scoring, with Transfermarkt↔Understat
+entity resolution at 97.5% top-5 coverage. Club Elo is outstanding: `api.clubelo.com` has been
+returning HTTP 502, so league strength still uses the placeholder coefficients in
+`seeds/league_tiers.csv`. Run `ingest/clubelo.py` to check whether it has recovered.
 
-See `SPEC.md` for the full design and `CLAUDE.md` for the working agreement.
+Findings and the reasoning behind the scoring choices are in `docs/phase1_findings.md`;
+`docs/phase0_reconciliation.md` records how the real schemas differed from what the spec assumed.
+
+See `SPEC.md` for the full design, `PHASE1.md` for the Phase 1 work order, and `CLAUDE.md` for the
+working agreement.

@@ -62,6 +62,22 @@ c[4].metric(
 )
 c[5].metric("Score", f"{row['composite_score']:.1f}")
 
+if (
+    pd.notna(row["current_club_league_name"])
+    or row["league_name"] != row["current_club_league_name"]
+) and row["league_name"] != row["current_club_league_name"]:
+    st.warning(
+        f"Scored on **{row['league_name']}** minutes, but now at "
+        f"**{row['current_club_name']}**"
+        + (
+            f" ({row['current_club_league_name']})."
+            if pd.notna(row["current_club_league_name"])
+            else " — a club outside the leagues this tool covers."
+        )
+        + " He has already moved; the score describes the season he played, "
+        "not where he is now."
+    )
+
 if row["confidence"] == "low":
     st.warning(
         "Low confidence: no positional metrics exist for this player in the "
