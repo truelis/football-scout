@@ -5,6 +5,6 @@ transform/logs/
 transform/package-lock.yml
 __pycache__/
 *.pyc
-.venv/
+.venv
 .env
 transform/.user.yml

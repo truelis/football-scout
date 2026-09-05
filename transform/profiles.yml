@@ -1,13 +1,22 @@
-# NOTE: on a machine with DBT_PROFILES_DIR set (this one points at ~/.dbt), dbt
-# NEVER READS THIS FILE. The live profile is the `football_scout:` block in
-# ~/.dbt/profiles.yml. Editing here alone will appear to do nothing - change
-# both, or `unset DBT_PROFILES_DIR` to make this file authoritative again.
-# See CLAUDE.md, "dbt profile - machine-local, needed once per laptop".
+# The project's own profile, and the only one - this file is authoritative.
+#
+# dbt resolves profiles in this order:
+#     --profiles-dir flag  >  DBT_PROFILES_DIR  >  current directory  >  ~/.dbt
+#
+# Because dbt commands are run from `transform/`, the third rule picks this file
+# up. That only works while DBT_PROFILES_DIR is unset: it used to be exported in
+# ~/.zshrc, which silently overrode this file and sent dbt to ~/.dbt instead.
+# It was redundant - dbt already falls back to ~/.dbt on its own - so it was
+# removed, and the sibling dbt projects in this workspace still resolve normally.
+#
+# Keeping the profile in the repo means it travels with the project: a fresh
+# clone on another laptop needs no ~/.dbt setup at all.
 football_scout:
   target: dev
   outputs:
     dev:
       type: duckdb
+      # Relative to the dbt working directory, i.e. transform/.
       path: ../data/scout.duckdb
       threads: 4
       # Attach the downloaded transfermarkt-datasets file READ-ONLY.

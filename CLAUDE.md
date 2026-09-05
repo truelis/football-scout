@@ -79,17 +79,18 @@ uv run streamlit run app/Home.py         # launch the UI
 uv run python scoring/backtest.py --as-of 2024-01-01
 ```
 
-### dbt profile — machine-local, needed once per laptop
+### dbt profile — lives in the repo, no per-laptop setup
 
-`DBT_PROFILES_DIR` is set to `~/.dbt` on this machine, so dbt reads `~/.dbt/profiles.yml` and
-**ignores `transform/profiles.yml`**. The repo copy is kept as the portable reference; the live
-one is the `football_scout:` block in `~/.dbt/profiles.yml`, alongside the other projects in this
-workspace. On a new laptop, copy that block across and fix the absolute paths — or just
-`unset DBT_PROFILES_DIR`, after which dbt falls back to the project directory and the repo copy
-works as-is.
+`transform/profiles.yml` is the project's profile and the only copy. dbt resolves profiles in the
+order `--profiles-dir` > `DBT_PROFILES_DIR` > **current directory** > `~/.dbt`, and because dbt is
+run from `transform/`, the third rule finds it. A fresh clone needs no `~/.dbt` setup.
 
-If you change one, change the other. Symptom of them drifting: `Could not find profile named
-'football_scout'`, or dbt building against the wrong DuckDB file.
+This only works with `DBT_PROFILES_DIR` **unset**. It used to be exported from `~/.zshrc`, which
+silently overrode the repo copy and sent dbt to `~/.dbt` — the symptom was
+`Could not find profile named 'football_scout'`. It was redundant (dbt already falls back to
+`~/.dbt` unaided, so the workspace's other dbt projects resolve fine without it) and has been
+removed. **Don't re-add it**; if a sibling project ever needs a different profiles dir, pass
+`--profiles-dir` on that project's commands rather than exporting a global.
 
 ### Google Drive `Icon\r` files break the venv
 
