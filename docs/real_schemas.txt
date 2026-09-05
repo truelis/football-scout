@@ -1,0 +1,216 @@
+======================================================================
+appearances  (1,894,350 rows)
+======================================================================
+  appearance_id                                 VARCHAR
+  game_id                                       INTEGER
+  player_id                                     INTEGER
+  player_club_id                                INTEGER
+  player_current_club_id                        VARCHAR
+  date                                          DATE
+  player_name                                   VARCHAR
+  competition_id                                VARCHAR
+  yellow_cards                                  INTEGER
+  red_cards                                     INTEGER
+  goals                                         INTEGER
+  assists                                       INTEGER
+  minutes_played                                INTEGER
+
+======================================================================
+club_games  (177,916 rows)
+======================================================================
+  game_id                                       VARCHAR
+  club_id                                       INTEGER
+  own_goals                                     INTEGER
+  own_position                                  INTEGER
+  own_manager_name                              VARCHAR
+  opponent_id                                   INTEGER
+  opponent_goals                                INTEGER
+  opponent_position                             INTEGER
+  opponent_manager_name                         VARCHAR
+  hosting                                       VARCHAR
+  is_win                                        INTEGER
+
+======================================================================
+clubs  (796 rows)
+======================================================================
+  club_id                                       VARCHAR
+  club_code                                     VARCHAR
+  name                                          VARCHAR
+  domestic_competition_id                       VARCHAR
+  total_market_value                            FLOAT
+  squad_size                                    INTEGER
+  average_age                                   FLOAT
+  foreigners_number                             INTEGER
+  foreigners_percentage                         FLOAT
+  national_team_players                         INTEGER
+  stadium_name                                  VARCHAR
+  stadium_seats                                 INTEGER
+  net_transfer_record                           VARCHAR
+  coach_name                                    VARCHAR
+  last_season                                   VARCHAR
+  filename                                      VARCHAR
+  url                                           VARCHAR
+
+======================================================================
+competitions  (65 rows)
+======================================================================
+  competition_id                                VARCHAR
+  competition_code                              VARCHAR
+  name                                          VARCHAR
+  sub_type                                      VARCHAR
+  type                                          VARCHAR
+  country_id                                    INTEGER
+  country_name                                  VARCHAR
+  domestic_league_code                          VARCHAR
+  confederation                                 VARCHAR
+  total_clubs                                   INTEGER
+  url                                           VARCHAR
+
+======================================================================
+countries  (124 rows)
+======================================================================
+  country_id                                    VARCHAR
+  country_name                                  VARCHAR
+  country_code                                  VARCHAR
+  confederation                                 VARCHAR
+  total_clubs                                   INTEGER
+  total_players                                 INTEGER
+  average_age                                   FLOAT
+  url                                           VARCHAR
+
+======================================================================
+game_events  (1,274,469 rows)
+======================================================================
+  game_event_id                                 VARCHAR
+  date                                          DATE
+  game_id                                       VARCHAR
+  minute                                        INTEGER
+  type                                          VARCHAR
+  club_id                                       INTEGER
+  club_name                                     VARCHAR
+  player_id                                     INTEGER
+  description                                   VARCHAR
+  player_in_id                                  INTEGER
+  player_assist_id                              INTEGER
+
+======================================================================
+game_lineups  (3,179,016 rows)
+======================================================================
+  game_lineups_id                               VARCHAR
+  date                                          DATE
+  game_id                                       INTEGER
+  player_id                                     INTEGER
+  club_id                                       INTEGER
+  player_name                                   VARCHAR
+  type                                          VARCHAR
+  position                                      VARCHAR
+  number                                        VARCHAR
+  team_captain                                  INTEGER
+
+======================================================================
+games  (88,958 rows)
+======================================================================
+  game_id                                       VARCHAR
+  competition_id                                VARCHAR
+  season                                        VARCHAR
+  round                                         VARCHAR
+  date                                          DATE
+  home_club_id                                  INTEGER
+  away_club_id                                  INTEGER
+  home_club_goals                               INTEGER
+  away_club_goals                               INTEGER
+  home_club_position                            INTEGER
+  away_club_position                            INTEGER
+  home_club_manager_name                        VARCHAR
+  away_club_manager_name                        VARCHAR
+  stadium                                       VARCHAR
+  attendance                                    INTEGER
+  referee                                       VARCHAR
+  url                                           VARCHAR
+  home_club_formation                           VARCHAR
+  away_club_formation                           VARCHAR
+  home_club_name                                VARCHAR
+  away_club_name                                VARCHAR
+  aggregate                                     VARCHAR
+  competition_type                              VARCHAR
+
+======================================================================
+national_teams  (124 rows)
+======================================================================
+  national_team_id                              VARCHAR
+  name                                          VARCHAR
+  team_code                                     VARCHAR
+  country_id                                    VARCHAR
+  country_name                                  VARCHAR
+  country_code                                  VARCHAR
+  confederation                                 VARCHAR
+  team_image_url                                VARCHAR
+  squad_size                                    INTEGER
+  average_age                                   FLOAT
+  foreigners_number                             INTEGER
+  foreigners_percentage                         FLOAT
+  total_market_value                            INTEGER
+  coach_name                                    VARCHAR
+  fifa_ranking                                  INTEGER
+  last_season                                   VARCHAR
+  url                                           VARCHAR
+
+======================================================================
+player_valuations  (656,301 rows)
+======================================================================
+  player_id                                     INTEGER
+  date                                          DATE
+  market_value_in_eur                           INTEGER
+  current_club_name                             VARCHAR
+  current_club_id                               INTEGER
+  player_club_domestic_competition_id           VARCHAR
+
+======================================================================
+players  (50,149 rows)
+======================================================================
+  player_id                                     INTEGER
+  first_name                                    VARCHAR
+  last_name                                     VARCHAR
+  name                                          VARCHAR
+  last_season                                   VARCHAR
+  current_club_id                               VARCHAR
+  player_code                                   VARCHAR
+  country_of_birth                              VARCHAR
+  city_of_birth                                 VARCHAR
+  country_of_citizenship                        VARCHAR
+  date_of_birth                                 TIMESTAMP
+  sub_position                                  VARCHAR
+  position                                      VARCHAR
+  foot                                          VARCHAR
+  height_in_cm                                  INTEGER
+  contract_expiration_date                      TIMESTAMP
+  agent_name                                    VARCHAR
+  image_url                                     VARCHAR
+  international_caps                            INTEGER
+  international_goals                           INTEGER
+  current_national_team_id                      VARCHAR
+  url                                           VARCHAR
+  current_club_domestic_competition_id          VARCHAR
+  current_club_name                             VARCHAR
+  market_value_in_eur                           INTEGER
+  highest_market_value_in_eur                   INTEGER
+
+======================================================================
+transfers  (175,165 rows)
+======================================================================
+  player_id                                     INTEGER
+  transfer_date                                 DATE
+  transfer_season                               VARCHAR
+  from_club_id                                  INTEGER
+  to_club_id                                    INTEGER
+  from_club_name                                VARCHAR
+  to_club_name                                  VARCHAR
+  transfer_fee                                  DECIMAL(18,3)
+  market_value_in_eur                           DECIMAL(18,3)
+  player_name                                   VARCHAR
+
+======================================================================
+version  (1 rows)
+======================================================================
+  commit_hash                                   VARCHAR
+
