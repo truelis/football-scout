@@ -26,11 +26,52 @@ What remains free and current:
 
 | Source | Provides | Coverage | Access |
 |---|---|---|---|
-| **transfermarkt-datasets** (`dcaribou`) | Market values + history, players, clubs, games, appearances, transfers, lineups, events | Broad — major European leagues + internationals | Prepared **DuckDB file**, refreshed weekly |
+| **transfermarkt-datasets** (`dcaribou`) | Market values + history, players, clubs, games, appearances, transfers, lineups, events | **14 domestic leagues** (see §2.1.1) + cups and European competitions | Prepared **DuckDB file**, refreshed weekly |
 | **Understat** | xG, xA, npxG, shots, key passes, xGChain, xGBuildup — season and shot level | **Top 5 leagues + Russian Premier League only** | `soccerdata` Python package |
 | **Club Elo** | Team strength ratings, continuously updated | All European clubs | `soccerdata` |
 | **FBref** | Basic stats (goals, assists, minutes, cards), deep history | 100+ competitions | `soccerdata` — basic only |
 | **SoFIFA** | FIFA/EA attribute ratings, potential ratings | Broad | `soccerdata` |
+
+#### 2.1.1 What the Transfermarkt file actually contains
+
+Verified 2026-09-05 against commit `154367d` (211 MB, 13 tables). Full schema dump in
+`docs/real_schemas.txt`; the reconciliation write-up is `docs/phase0_reconciliation.md`.
+
+| Table | Rows | | Table | Rows |
+|---|---:|---|---|---:|
+| `appearances` | 1,894,350 | | `games` | 88,958 |
+| `game_lineups` | 3,179,016 | | `transfers` | 175,165 |
+| `game_events` | 1,274,469 | | `club_games` | 177,916 |
+| `player_valuations` | 656,301 | | `clubs` | 796 |
+| `players` | 50,149 | | `countries` / `national_teams` | 124 each |
+| | | | `competitions` | 65 |
+
+`players` covers only the 14 leagues below, **not** all of Transfermarkt — 50k is the correct
+order of magnitude, and an ingest floor above it will reject a valid download.
+
+`competitions` lists **31 domestic leagues, but appearances exist for only 14.** The other 17
+(Austria, Argentina, Brazil, MLS, Japan, Sweden, Norway, Poland, …) are present in the dimension
+with zero appearance rows and cannot be scored. The 14 with data, stable across seasons 2022–2025:
+
+```
+GB1  ES1  IT1  L1   FR1        top five
+PO1  NL1  TR1  BE1              tier 2
+SC1  GR1  DK1  RU1  UKR1        tier 3 / other
+```
+
+There is **no `is_major_national_league` column** — an early version of `stg_tm__competitions`
+assumed one and failed to build. The equivalent is `type = 'domestic_league'` **and**
+`sub_type = 'first_tier'`. Other `type` values: `domestic_cup` (10), `other` (16),
+`international_cup` (3), `national_team_competition` (5).
+
+Null rates that shape the scoring model: `contract_expiration_date` **37.0%**,
+`market_value_in_eur` 17.2%, `current_club_domestic_competition_id` 6.0%, `date_of_birth` 0.1%.
+`position` has no nulls but does carry a literal `'Missing'` value (586 players).
+
+Type notes: `date_of_birth` and `contract_expiration_date` are `TIMESTAMP`, not `DATE`;
+`last_season` and `clubs.club_id` are `VARCHAR` while `appearances.player_club_id` is `INTEGER`.
+That id-type split costs nothing in Phase 1 (no model joins `clubs`) but must be cast in staging
+before Phase 2 wires up team strength.
 
 ### 2.2 The coverage paradox
 
@@ -103,12 +144,24 @@ football-scout/
 
 ### 4.1 Staging (`stg_*`) — one model per source table, renaming and typing only
 
+As built in Phase 1 (five models — the names below are the real ones):
+
 ```
-stg_tm__players            stg_tm__appearances       stg_tm__valuations
-stg_tm__clubs              stg_tm__games             stg_tm__transfers
+stg_tm__players            stg_tm__appearances       stg_tm__player_valuations
+stg_tm__clubs              stg_tm__competitions
+```
+
+Phases 2+ add:
+
+```
+stg_tm__games              stg_tm__transfers
 stg_understat__player_season
 stg_clubelo__ratings
 ```
+
+`stg_tm__clubs` and `stg_tm__competitions` are currently **leaf models** — built and tested, but
+nothing downstream reads them yet. They earn their place in Phase 2 (team strength, explicit
+competition-type filtering).
 
 ### 4.2 Intermediate (`int_*`) — the hard parts
 
