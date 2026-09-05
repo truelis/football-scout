@@ -23,4 +23,9 @@ select
 from {{ ref('int_player_season') }} s
 left join {{ ref('league_tiers') }} lt on s.competition_id = lt.competition_id
 left join {{ ref('dim_player') }} d using (player_id)
-where lt.competition_id is not null   -- domestic leagues we have tiers for
+-- No `where lt.competition_id is not null` here, deliberately. That silently
+-- dropped any league missing from the seed - which is exactly how RU1 and UKR1
+-- (~7,300 appearances each) went unnoticed. int_player_season now restricts to
+-- first-tier domestic leagues, so every row reaching this model SHOULD have a
+-- tier; a null one means the seed is behind the data and the not_null test on
+-- `tier` fails the build rather than quietly shrinking the fact table.

@@ -224,9 +224,13 @@ Season 2025 volume, against `seeds/league_tiers.csv`:
 | ✓ | GR1 Super League Greece | 5,660 | 432 |
 | ✓ | DK1 Danish Superliga | 4,112 | 333 |
 
-Every seeded id exists upstream with real volume — no dead entries. Two live leagues are unseeded and
-therefore silently dropped by `fct_player_season`'s `where lt.competition_id is not null`. Task 2 work,
-recorded here because it changes what Task 3 will see.
+Every seeded id exists upstream with real volume — no dead entries. Two live leagues were unseeded and
+therefore silently dropped by `fct_player_season`'s `where lt.competition_id is not null`.
+
+**Resolved in Task 2.** `RU1` and `UKR1` are now seeded (tier 2 / 0.66 and tier 3 / 0.60 — placeholder
+guesses like the rest of the file), the silent `where` clause is gone, and a `not_null` test on
+`fct_player_season.tier` now fails the build if a league ever has data but no seed row. Shortlist grew
+216 → 271; the two new leagues contribute 53 players, 20% of the list.
 
 **The league set is stable across seasons.** The same 14 appear in 2022, 2023, 2024 and 2025 at
 consistent volume, so `prev_season` is not missing whole leagues and the newcomer effect in §6 is a

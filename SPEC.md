@@ -59,10 +59,21 @@ PO1  NL1  TR1  BE1              tier 2
 SC1  GR1  DK1  RU1  UKR1        tier 3 / other
 ```
 
+All 14 are seeded in `seeds/league_tiers.csv` as of Task 2; `RU1` and `UKR1` were missing before
+that and were being dropped silently.
+
 There is **no `is_major_national_league` column** — an early version of `stg_tm__competitions`
 assumed one and failed to build. The equivalent is `type = 'domestic_league'` **and**
 `sub_type = 'first_tier'`. Other `type` values: `domestic_cup` (10), `other` (16),
 `international_cup` (3), `national_team_competition` (5).
+
+**Four competition_ids in `appearances` have no row in `competitions` at all** — `POCP`
+(Taça da Liga), `CGB` (EFL Cup), `KLUB` (Club World Cup) and `UKRS` (Ukrainian Super Cup),
+~14k appearances between them. All four are cups, so none belongs in the scoring sample, but the
+gap is why the domestic-league filter in `int_player_season` is written **positively**
+(`is_first_tier_domestic_league`) rather than as "not a cup" — a negative filter would let these
+through. `tests/assert_appearance_competitions_known.sql` watches for new orphans at warn
+severity.
 
 Null rates that shape the scoring model: `contract_expiration_date` **37.0%**,
 `market_value_in_eur` 17.2%, `current_club_domestic_competition_id` 6.0%, `date_of_birth` 0.1%.

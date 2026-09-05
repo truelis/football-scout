@@ -24,10 +24,24 @@ models:
               arguments: {min_value: 14}
 
   - name: fct_player_season
-    description: Player x season x competition production, with league context.
+    description: >
+      Player x season x competition production, with league context. Restricted
+      to first-tier domestic leagues upstream in int_player_season - cup and
+      European ties are excluded, so per-90 rates are not distorted by a club's
+      cup run.
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [player_id, season, competition_id]
+    columns:
+      - name: tier
+        description: >
+          Not-null is the Task 2 acceptance criterion: every competition in the
+          fact table must carry a tier. A null here means a league has data but
+          no seeds/league_tiers.csv row, and the build should fail rather than
+          score its players on an unadjusted rate.
+        tests: [not_null]
+      - name: strength_coef
+        tests: [not_null]
 
   - name: mart_player_scores
     description: >
