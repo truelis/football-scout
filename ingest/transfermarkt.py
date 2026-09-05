@@ -20,14 +20,21 @@ import httpx
 URL = "https://pub-e682421888d945d684bcae8890b0ec20.r2.dev/data/transfermarkt-datasets.duckdb"
 DEST = Path(__file__).resolve().parents[1] / "data" / "transfermarkt-datasets.duckdb"
 
-# Tables Phase 1 depends on. If any is missing or empty after download, the
+# Tables Phase 1 depends on. If any is missing or short after download, the
 # refresh failed and we must not overwrite a known-good file.
+#
+# Floors are set at roughly half the observed row count as of 2026-09-05
+# (commit 154367d): players 50,149 / appearances 1,894,350 / valuations
+# 656,301 / clubs 796 / competitions 65. `players` is scoped to the 14 covered
+# leagues, NOT all of Transfermarkt - an earlier 100,000 floor here rejected a
+# complete, valid download. Keep these below reality but above zero: the point
+# is catching a truncated fetch, not asserting the dataset never shrinks.
 REQUIRED = {
-    "players": 100_000,
+    "players": 40_000,
     "appearances": 1_000_000,
-    "player_valuations": 100_000,
-    "clubs": 100,
-    "competitions": 10,
+    "player_valuations": 300_000,
+    "clubs": 400,
+    "competitions": 30,
 }
 
 
