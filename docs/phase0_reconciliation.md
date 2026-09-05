@@ -306,6 +306,56 @@ Two things the Task 3 read should expect:
 
 ---
 
+## 9. UI defects found smoke-testing against real data
+
+Not schema, but they surfaced only once real rows existed and they block PHASE1.md's
+"Streamlit shortlist **and drill-down** both work against real data". All three are fixed.
+
+**The drill-down crashed for 16 of 216 shortlisted players.**
+
+```python
+f"{row['contract_months_remaining']:.0f}m" if row["x"] == row["x"] else "—"
+TypeError: boolean value of NA is ambiguous
+```
+
+The `x == x` NaN self-comparison idiom is correct for float NaN but breaks on pandas nullable
+`Int64`, which is what DuckDB returns for `contract_months_remaining`: a null arrives as `pd.NA`,
+`pd.NA == pd.NA` is `pd.NA`, and evaluating its truthiness raises. With
+`contract_expiration_date` 37% null upstream this was never going to stay hidden. Replaced with
+`pd.notna()`. All 216 players now render.
+
+**The shortlist hid 40% of itself on load.**
+
+```python
+max_age = st.slider("Max age", 16, 30, int(df["age"].max()))   # int(22.97) -> 22
+```
+
+`age` is fractional, so the default truncated to 22 and dropped the 87 players between 22.01 and
+22.97 — with no indication anything had been filtered. Now `math.ceil`. Filter decomposition from
+216 rows:
+
+| filter (at its default) | keeps | drops |
+|---|---:|---:|
+| `age <= 22` (truncation bug) | 129 | **87** |
+| `minutes >= 900` | 144 | 72 |
+| league (built from `dropna()`) | 212 | 4 |
+| position / value / contract | 216 | 0 |
+| **all combined** | **76** | 140 |
+
+Default view is now **144** rather than 76.
+
+**Four players vanished silently.** `league_name` comes from the player's *current club*, which can
+sit outside the seeded leagues even when he was scored on minutes inside them. The multiselect
+default was built from `dropna().unique()`, so those rows failed `.isin()` and disappeared with no
+UI trace; the drill-down labelled them `(nan)`. Now filled as `(unknown)` — selectable and visible.
+
+**Left deliberately:** the `Min minutes` slider still defaults to 900, which overrides the mart's own
+`600+ if rising` eligibility and hides 72 players (48 of them the §6 newcomers). That is a
+judgement call for the owner, not a bug, so the number is unchanged — but the sidebar now states
+the band exists rather than letting it be invisible.
+
+---
+
 ## Recommended order
 
 Task 1 close-out — **done**:

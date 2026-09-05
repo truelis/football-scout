@@ -1,4 +1,5 @@
 """Shortlist view - the app's landing page."""
+import math
 from pathlib import Path
 
 import duckdb
@@ -24,6 +25,12 @@ if not DB.exists():
     st.stop()
 
 df = load()
+
+# A player scored on minutes in a seeded league can have a current club outside
+# one, leaving league_name null. Those rows would silently vanish from an
+# .isin() filter built off dropna(), so name the gap and let it be selected.
+df["league_name"] = df["league_name"].fillna("(unknown)")
+
 st.title("Shortlist")
 st.caption(
     f"{len(df):,} players under the budget cap. Scores are relative to positional "
@@ -37,10 +44,21 @@ with st.sidebar:
     pos = st.multiselect("Position", positions, default=positions)
     leagues = sorted(df["league_name"].dropna().unique())
     lg = st.multiselect("League", leagues, default=leagues)
-    max_age = st.slider("Max age", 16, 30, int(df["age"].max()))
+    # ceil, not int: age is fractional, so int(22.97) defaulted the slider to 22
+    # and hid the 87 players between 22.01 and 22.97 - 40% of the shortlist,
+    # invisible on load with no indication anything had been filtered.
+    max_age = st.slider("Max age", 16, 30, math.ceil(df["age"].max()))
     max_val = st.slider("Max market value (€m)", 0.0, 10.0,
                         float(df["current_market_value_eur"].max() / 1e6), 0.25)
     min_mins = st.slider("Min minutes", 0, 3400, 900, 100)
+    # Left at 900 deliberately - it is the owner's call, not a bug to fix here.
+    # But it silently overrides the mart's own eligibility rule, which admits
+    # 600+ when minutes are rising, so say so rather than let it hide the
+    # newcomers this tool exists to find.
+    st.caption(
+        f"The shortlist itself admits 600+ minutes when rising. "
+        f"{int((df['minutes_played'] < 900).sum())} players sit in the 600–899 band."
+    )
     contract = st.multiselect("Contract status",
                               sorted(df["contract_status"].dropna().unique()),
                               default=sorted(df["contract_status"].dropna().unique()))

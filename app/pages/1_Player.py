@@ -6,6 +6,7 @@ nearest-neighbour comparables.
 from pathlib import Path
 
 import duckdb
+import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -28,7 +29,11 @@ if players.empty:
     st.warning("Shortlist is empty — run `dbt build` first.")
     st.stop()
 
-labels = {int(r.player_id): f"{r.player_name} — {r.current_club_name} ({r.league_name})"
+# league_name comes from the player's CURRENT club, which may sit outside the
+# seeded leagues even though he was scored on minutes inside them - so it can be
+# null. Render that as "league unknown" rather than a bare "(nan)".
+labels = {int(r.player_id): f"{r.player_name} — {r.current_club_name} "
+                            f"({r.league_name if pd.notna(r.league_name) else 'league unknown'})"
           for r in players.itertuples()}
 pid = st.selectbox("Player", list(labels), format_func=lambda k: labels[k])
 
@@ -40,8 +45,12 @@ c[0].metric("Age", f"{row['age']:.1f}")
 c[1].metric("Position", row["sub_position"] or row["position_group"])
 c[2].metric("Value", f"€{row['current_market_value_eur']/1e6:.2f}m")
 c[3].metric("Est. fee", f"€{row['estimated_fee_eur']/1e6:.2f}m")
+# pd.notna, NOT the `x == x` NaN idiom: contract_months_remaining arrives as a
+# nullable Int64, so a null is pd.NA, and `pd.NA == pd.NA` is pd.NA - truthiness
+# on which raises. 37% of players upstream have no contract_expiration_date, so
+# this crashed the page for 16 of the 216 shortlisted.
 c[4].metric("Contract", f"{row['contract_months_remaining']:.0f}m"
-            if row["contract_months_remaining"] == row["contract_months_remaining"] else "—")
+            if pd.notna(row["contract_months_remaining"]) else "—")
 c[5].metric("Score", f"{row['composite_score']:.1f}")
 
 if row["confidence"] == "low":

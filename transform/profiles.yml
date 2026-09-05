@@ -1,3 +1,8 @@
+# NOTE: on a machine with DBT_PROFILES_DIR set (this one points at ~/.dbt), dbt
+# NEVER READS THIS FILE. The live profile is the `football_scout:` block in
+# ~/.dbt/profiles.yml. Editing here alone will appear to do nothing - change
+# both, or `unset DBT_PROFILES_DIR` to make this file authoritative again.
+# See CLAUDE.md, "dbt profile - machine-local, needed once per laptop".
 football_scout:
   target: dev
   outputs:
