@@ -72,8 +72,32 @@ No Postgres, no Docker, no Airflow, no cloud warehouse, no web framework. If a t
 
 ```bash
 uv sync                                  # install
-uv run python ingest/run.py              # refresh raw data
+uv run python ingest/transfermarkt.py    # download the Transfermarkt DuckDB file
+cd transform && uv run dbt deps          # once, installs dbt_utils
 cd transform && uv run dbt build         # transform + test
 uv run streamlit run app/Home.py         # launch the UI
 uv run python scoring/backtest.py --as-of 2024-01-01
 ```
+
+### dbt profile — machine-local, needed once per laptop
+
+`DBT_PROFILES_DIR` is set to `~/.dbt` on this machine, so dbt reads `~/.dbt/profiles.yml` and
+**ignores `transform/profiles.yml`**. The repo copy is kept as the portable reference; the live
+one is the `football_scout:` block in `~/.dbt/profiles.yml`, alongside the other projects in this
+workspace. On a new laptop, copy that block across and fix the absolute paths — or just
+`unset DBT_PROFILES_DIR`, after which dbt falls back to the project directory and the repo copy
+works as-is.
+
+If you change one, change the other. Symptom of them drifting: `Could not find profile named
+'football_scout'`, or dbt building against the wrong DuckDB file.
+
+### Google Drive `Icon\r` files break the venv
+
+Drive scatters macOS custom-icon files (`Icon` + CR) through synced folders, and `jsonschema`
+crashes iterating a directory containing one — `dbt deps` dies with `NotADirectoryError`. Fix:
+
+```bash
+find .venv -name 'Icon?' -delete
+```
+
+This recurs on every sync. Exclude `.venv/` from Drive, or move the venv outside the Drive folder.
