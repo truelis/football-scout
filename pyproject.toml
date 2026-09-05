@@ -12,6 +12,8 @@ dependencies = [
     "streamlit>=1.40",
     "plotly>=5.24",
     "pyyaml>=6.0",
+    "soccerdata>=1.8",
+    "rapidfuzz>=3.14.6",
 ]
 
 [dependency-groups]
