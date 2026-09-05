@@ -64,8 +64,15 @@ c[5].metric("Score", f"{row['composite_score']:.1f}")
 
 if row["confidence"] == "low":
     st.warning(
-        "Low confidence: Phase 1 scores defenders on attacking output only. "
-        "There are no defensive metrics in this dataset yet."
+        "Low confidence: no positional metrics exist for this player in the "
+        "free data. Treat the score as a prompt to look, not as a measurement."
+    )
+if row["minutes_trend_basis"] == "no_prior_season":
+    st.info(
+        "No prior domestic season, so the minutes trend is inferred from how "
+        "much he played this season rather than from growth against a baseline. "
+        "Youth graduates and new signings land here — a weaker signal, not a "
+        "worse player."
     )
 
 # ---- score decomposition: why is he ranked here ----

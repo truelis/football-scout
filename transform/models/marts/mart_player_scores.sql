@@ -37,11 +37,21 @@ agg AS (
         SUM(goal_contributions) AS goal_contributions,
         MAX(position_group) AS position_group,
         MAX(tier) AS tier,
-        MAX(strength_coef) AS strength_coef,
+        -- MINUTES-WEIGHTED, not MAX. A player splitting a season across two
+        -- leagues used to have his COMBINED output multiplied by the stronger
+        -- league's coefficient. Omri Gandelman played 1428' in Belgium (0.68)
+        -- and 979' in Serie A (0.93) and was credited at 0.93 - a 19% inflation
+        -- on the rate that decides his percentile. 89 players span tiers.
+        SUM(minutes_played * strength_coef)
+        / NULLIF(SUM(minutes_played), 0) AS strength_coef,
         SUM(goal_contributions) * 90.0
         / NULLIF(SUM(minutes_played), 0) AS ga_per90,
         SUM(goal_contributions) * 90.0
-        / NULLIF(SUM(minutes_played), 0) * MAX(strength_coef) AS ga_per90_adj
+        / NULLIF(SUM(minutes_played), 0)
+        * (
+            SUM(minutes_played * strength_coef)
+            / NULLIF(SUM(minutes_played), 0)
+        ) AS ga_per90_adj
     FROM ref_season
     GROUP BY 1
 ),
@@ -54,9 +64,15 @@ eligible AS (
     FROM agg AS a
     LEFT JOIN prev_season AS p USING (player_id)
     WHERE a.minutes_played >= {{ var('min_minutes_if_trending') }}
-    -- Goalkeepers cannot be scored on attacking output and Phase 1 has no
-    -- goalkeeping metrics. Excluding them beats ranking them on noise.
-    AND a.position_group != 'Goalkeeper'
+    -- Excluded position groups come from dbt_project.yml, never hard-coded.
+    -- Goalkeepers have no metrics at all in the free data; defenders have no
+    -- DEFENSIVE ones, so ranking them on goal contributions measures the
+    -- absence of something they are not paid to do.
+    AND a.position_group NOT IN (
+        {%- for g in var('excluded_position_groups') %}
+        '{{ g }}'{{ "," if not loop.last }}
+        {%- endfor %}
+    )
 ),
 
 -- Percentiles are computed WITHIN position group and league tier. A percentile
@@ -103,6 +119,11 @@ SELECT
     p.goal_contributions,
     p.ga_per90,
     p.ga_per90_adj,
+    -- The minutes-weighted league coefficient actually applied to this player,
+    -- retained so the UI can explain the league adjustment instead of the user
+    -- having to trust it. Differs from dim_player's tier for anyone who moved
+    -- mid-season - that one describes his CURRENT club, this one what he played.
+    p.strength_coef AS season_strength_coef,
     p.prev_minutes,
     p.prev_ga_per90,
     p.pct_output,
@@ -116,35 +137,56 @@ SELECT
     ROUND(100 * (0.75 * p.pct_output + 0.25 * p.pct_minutes), 1) AS performance_score,
 
     -- ---- AXIS 2: trajectory ----
-    -- age curve: gaussian around peak_age, so younger-than-peak scores high
-    ROUND(100 * EXP(
-        -POWER(d.age - {{ var('peak_age') }}, 2)
-        / (2 * POWER({{ var('age_curve_width') }}, 2))
-    ), 1) AS age_score,
-    ROUND(100 * LEAST(1.0, GREATEST(
-        0.0,
-        0.5 + 0.5 * COALESCE(
-            (p.minutes_played - p.prev_minutes) / NULLIF(p.prev_minutes, 0), 0
-        )
-    )), 1) AS minutes_trend_score,
+    -- Age: logistic DECAY, high and flat through the teens, falling away past
+    -- the midpoint. Replaces a gaussian centred on 25.5, which - inside an
+    -- age<=23 shortlist - put every player on its rising slope and so rewarded
+    -- being OLDER: 18-year-olds averaged 46.4 against 89.7 for 23-year-olds.
+    ROUND(100 / (1 + EXP(
+        (d.age - {{ var('age_midpoint') }}) / {{ var('age_steepness') }}
+    )), 1) AS age_score,
+    -- Minutes trend. A player with no prior domestic season has no trend to
+    -- measure, and a flat 0.5 put 54% of the shortlist on one value - while
+    -- youth graduates and new signings are exactly the target profile. They are
+    -- scored instead on how much they actually played, which is real evidence
+    -- of the manager's opinion even without a baseline. Basis is exposed below
+    -- so the UI never presents the two as the same measurement.
+    ROUND(100 * CASE
+        WHEN p.prev_minutes IS NULL OR p.prev_minutes = 0 THEN p.pct_minutes
+        ELSE LEAST(1.0, GREATEST(
+            0.0, 0.5 + 0.5 * (p.minutes_played - p.prev_minutes) / p.prev_minutes
+        ))
+    END, 1) AS minutes_trend_score,
+    CASE
+        WHEN p.prev_minutes IS NULL OR p.prev_minutes = 0 THEN 'no_prior_season'
+        ELSE 'prior_season'
+    END AS minutes_trend_basis,
     ROUND(100 * LEAST(1.0, GREATEST(
         0.0,
         0.5 + COALESCE(v.value_growth_12m, 0)
     )), 1) AS value_trend_score,
 
     -- ---- AXIS 3: availability ----
+    -- Contract runway as a continuous logistic decay. The previous four-bucket
+    -- CASE produced just FIVE distinct values across 271 players, 45% of them
+    -- identical - a categorical axis wearing a 0-100 costume. Shape is
+    -- unchanged in spirit: short runway scores high, and the midpoint sits at
+    -- two years. Unknown expiry keeps its own explicit default rather than
+    -- silently scoring as though the contract were long.
     ROUND(100 * CASE
-        WHEN d.contract_months_remaining IS NULL THEN 0.40
-        WHEN d.contract_months_remaining <= {{ var('contract_bargain_months') }} THEN 1.00
-        WHEN d.contract_months_remaining <= {{ var('contract_leverage_months') }} THEN 0.75
-        WHEN d.contract_months_remaining <= 30 THEN 0.45
-        ELSE 0.25
+        WHEN d.contract_months_remaining IS NULL
+            THEN {{ var('contract_unknown_score') }}
+        ELSE 1 / (1 + EXP(
+            (d.contract_months_remaining - {{ var('contract_midpoint_months') }})
+            / {{ var('contract_steepness_months') }}
+        ))
     END, 1) AS availability_score,
 
     -- confidence flag: Phase 1 has NO defensive or goalkeeping metrics.
     -- Do not let a tidy number imply we measured something we did not.
-    CASE WHEN d.position_group IN ('Attack', 'Midfield') THEN 'medium' ELSE 'low' END
-        AS confidence
+    CASE
+        WHEN d.position_group IN ('Attack', 'Midfield') THEN 'medium'
+        ELSE 'low'
+    END AS confidence
 
 FROM pct AS p
 INNER JOIN {{ ref('dim_player') }} AS d USING (player_id)

@@ -45,9 +45,25 @@ vars:
   min_minutes: 900
   min_minutes_if_trending: 600
 
-  # -- age curve (peak_age = top of the curve, decay = penalty steepness)
-  peak_age: 25.5
-  age_curve_width: 6.0
+  # -- who gets scored at all. Goalkeepers have no metrics in the free data;
+  #    defenders have no DEFENSIVE metrics, so Phase 1 ranked them on attacking
+  #    output they are not paid to produce - 42 of 105 had zero goal
+  #    contributions. Drop 'Defender' from this list to score them anyway.
+  excluded_position_groups: ['Goalkeeper', 'Defender']
+
+  # -- age curve. A LOGISTIC DECAY, not a gaussian around peak age.
+  #    The gaussian (peak_age 25.5) was a bug: inside an age<=23 filter every
+  #    player sits on its rising side, so it scored 23-year-olds 43 points ABOVE
+  #    18-year-olds - the opposite of SPEC 5.3's "reward 18-23, penalise 26+".
+  #    midpoint = the age scoring 0.5; steepness = years per unit of decay.
+  age_midpoint: 24.5
+  age_steepness: 1.5
+
+  # -- contract runway curve. Continuous, replacing four coarse buckets that put
+  #    45% of the shortlist on one value. Months at which the score is 0.5.
+  contract_midpoint_months: 24.0
+  contract_steepness_months: 8.0
+  contract_unknown_score: 0.40
 
   # -- composite weights (need not sum to 1; normalised in the model)
   w_performance: 0.45

@@ -190,3 +190,96 @@ are transfers that have already happened; the shortlist is describing a player w
 4. **Give newcomers a real minutes-trend treatment** — 54% of the list sits on the default.
 5. Leave the weights alone until Phase 3's backtest can arbitrate. Changing them now is fitting to
    intuition, and 1–4 will move the rankings more than any weight will.
+
+---
+
+# Task 4 — what was changed, and what it did
+
+All five items above were implemented. **No weights were touched** — those wait for Phase 3's
+backtest, per PHASE1.md. Every new parameter lives in `transform/dbt_project.yml` under `vars:`.
+
+`dbt build`: PASS=53, WARN=1 (the orphan-competition watchdog), ERROR=0.
+Shortlist **271 → 166**; the entire difference is the 105 excluded defenders.
+
+## 1. Age curve — fixed, and it now points the right way
+
+Gaussian around `peak_age` replaced with a logistic decay (`age_midpoint: 24.5`,
+`age_steepness: 1.5`).
+
+| age | n | age_score before | age_score after |
+|---:|---:|---:|---:|
+| 18 | 2 | 46.4 | **98.7** |
+| 20 | 23 | 66.0 | 95.1 |
+| 22 | 69 | 84.3 | 83.7 |
+| 23 | 30 | 89.7 | **76.9** |
+
+The signal is now monotonically decreasing in age, as SPEC §5.3 specifies. Note that mean
+*composite* still rises gently with age (41.7 at 18 → 52.0 at 22) — that is not the age term any
+more, it is older players having more minutes and more output. That is legitimate, and it is what
+the age term is supposed to be counterweighting rather than reinforcing.
+
+## 2. Availability — continuous, no longer categorical
+
+Four-bucket `CASE` replaced with a logistic decay on contract months
+(`contract_midpoint_months: 24.0`, `contract_steepness_months: 8.0`,
+`contract_unknown_score: 0.40`).
+
+**5 distinct values → 14**, range 1.6–93.2, sd 27.7. Granularity is now limited only by the
+integer month input rather than by hand-drawn buckets, and the shape is unchanged in spirit —
+short runway scores high, midpoint at two years.
+
+## 3. Minutes trend — the 54% pile-up is gone
+
+Players with no prior domestic season were all pinned at exactly 50.0. They now score on
+`pct_minutes` — how much they actually played — which is genuine evidence of the manager's
+opinion even without a baseline.
+
+**43 distinct values → 106.** The single largest cluster is now 52 players at 100.0 (a real
+ceiling: minutes more than doubled), against 146 identical values before.
+
+A new `minutes_trend_basis` column (`prior_season` / `no_prior_season`) is carried on the row and
+surfaced in both UI pages, so the two measurements are never presented as the same thing.
+
+**Worth flagging:** newcomers now average 35.4 against 90.0 for returning players — a wider gap
+than the old flat 50.0 gave them. That is honest (a first-season player who played little has weak
+evidence of a rising role) but it is a real ranking effect, and `pct_minutes` already feeds
+`performance_score` at 0.25, so minutes are counted twice for these players. Worth revisiting in
+Phase 3 against the backtest rather than by intuition now.
+
+## 4. Multi-league coefficient — now minutes-weighted
+
+`MAX(strength_coef)` replaced with `SUM(minutes * coef) / SUM(minutes)`.
+
+| player | old coef | new coef | old adj | new adj |
+|---|---:|---:|---:|---:|
+| Omri Gandelman | 0.930 | **0.782** | 0.383 | **0.322** |
+| Kenneth Taylor | 0.930 | **0.830** | 0.343 | **0.306** |
+
+Gandelman played 1,428′ in Belgium (0.68) and 979′ in Serie A (0.93) and was being credited at
+Serie A's coefficient on his combined output — a 19% inflation of the rate that sets his
+percentile. The new value matches the hand-computed truth exactly.
+
+`season_strength_coef` is now retained on `mart_player_scores`, per CLAUDE.md's rule that marts
+keep their inputs, so the UI can explain the league adjustment rather than asking to be trusted.
+
+## 5. Defenders — excluded, and configurably so
+
+`excluded_position_groups: ['Goalkeeper', 'Defender']`. This also removes the hard-coded
+`'Goalkeeper'` string that was sitting in the SQL against CLAUDE.md rule 1.
+
+They are excluded, not ranked badly — the same treatment goalkeepers already had, and for the same
+reason: 42 of 105 had zero goal contributions, and `ga_per90` was the only performance input.
+Dropping `'Defender'` from that list scores them again.
+
+Every scored player is now `confidence = medium`. The `low` branch is retained for when Phase 2
+brings in position groups that are measurable but weakly so.
+
+## Still open, deliberately
+
+- **Weights untouched.** Performance still correlates hardest with the composite; that is a
+  variance-spread property, not a weight error, and Phase 3 should arbitrate it.
+- **Placeholder league coefficients.** Ukraine and Russia still carry uncalibratable guesses.
+- **Displayed league still comes from the current club**, so a player who moved mid-season shows
+  his new league next to scores earned in his old one. `season_strength_coef` now exposes the
+  discrepancy; reconciling the display is a UI task.
+- **No xG, no injury or off-field data.** Unchanged, and unchangeable in Phase 1.
