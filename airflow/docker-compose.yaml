@@ -20,9 +20,32 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__API__EXPOSE_CONFIG: "true"
+    # Airflow 3 runs tasks against a Task Execution API rather than letting them
+    # touch the metadata DB directly. Workers must be told where that API lives:
+    # the default assumes localhost, which inside the scheduler container is the
+    # scheduler itself, so every task dies with
+    #     httpx.ConnectError: [Errno 111] Connection refused
+    # after exhausting its retries. This is new in 3.x and not needed in 2.x.
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: http://airflow-apiserver:8080/execution/
+    # The scheduler SIGNS a JWT that the task uses to call that API, and the
+    # apiserver VERIFIES it. Without a shared secret each service invents its own
+    # at startup, so every task dies with
+    #     ServerResponseError: Invalid auth token
+    # Local-only value; generate a real one for anything that leaves this laptop.
+    AIRFLOW__API_AUTH__JWT_SECRET: "${AIRFLOW_JWT_SECRET:-local-dev-not-a-real-secret}"
+    # Airflow 3 replaced FAB with SimpleAuthManager by default, so the old
+    # `airflow users create` no longer exists. For a stack that only ever listens
+    # on localhost, skipping login entirely is simpler and no less secure than a
+    # hardcoded airflow/airflow. Do NOT carry this to anything reachable.
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
     # Our tasks shell out to project scripts; this is where they live in-container.
     PROJECT_DIR: /opt/project
-    PYTHONPATH: /opt/project
+    # NO PYTHONPATH=/opt/project. The repo has an `airflow/` directory at its
+    # root, so putting it on the path makes `import airflow` resolve to OUR
+    # folder as a namespace package and shadow the real install. The symptom is
+    # ModuleNotFoundError: No module named 'airflow.__main__' - which points at
+    # the image, not at a path collision, and cost a rebuild to find.
+    # Tasks invoke scripts by absolute path, so nothing needs it.
   volumes:
     - ./dags:/opt/airflow/dags
     - ./logs:/opt/airflow/logs
@@ -93,19 +116,18 @@ services:
 
   airflow-init:
     <<: *airflow-common
-    entrypoint: /bin/bash
-    command:
-      - -c
-      - |
-        airflow db migrate
-        airflow users create \
-          --username "${_AIRFLOW_WWW_USER_USERNAME:-airflow}" \
-          --password "${_AIRFLOW_WWW_USER_PASSWORD:-airflow}" \
-          --firstname Local --lastname Dev --role Admin \
-          --email dev@localhost || true
+    # NO entrypoint override. The image's entrypoint is what wires up the
+    # environment when the container runs as a remapped host UID rather than the
+    # image's own airflow user - bypassing it with `entrypoint: /bin/bash` leaves
+    # Python unable to find the airflow package at all. Every other service here
+    # passes a bare subcommand for the same reason.
+    command: db migrate
     environment:
       <<: *airflow-common-env
-    user: "0:0"
+    # NOT root. The official compose runs init as 0:0 to chown mounted dirs, but
+    # Airflow is installed under /home/airflow/.local and root does not see it -
+    # the symptom is ModuleNotFoundError: No module named 'airflow.__main__',
+    # which reads like a broken image rather than a wrong user.
 
 volumes:
   postgres-db-volume:

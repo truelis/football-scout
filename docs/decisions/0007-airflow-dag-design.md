@@ -71,3 +71,58 @@ green run (CLAUDE.md rule 5).
 - **Letting Club Elo failures fail the DAG.** Honest, but it means a week with no
   refresh at all because an optional enrichment source was down. The skip keeps
   the pipeline running in the degraded mode it was designed to support.
+
+---
+
+## Addendum: seven things that broke getting this running
+
+Recorded because every one of them presented as a different problem than it was,
+and because "it worked first time" is never the useful part of a build log.
+
+1. **`ModuleNotFoundError: No module named 'airflow.__main__'`** after adding
+   dbt to the image. dbt-core and Airflow pin Jinja2 in incompatible ranges, so
+   pip "resolved" it by mangling Airflow. **Fix:** project dependencies live in a
+   separate virtualenv at `/opt/venv`; Airflow's environment is never touched.
+   This is the standard way to run dbt under Airflow.
+
+2. **The same error again, for a completely different reason.** This repo has an
+   `airflow/` directory at its root, and `PYTHONPATH=/opt/project` made
+   `import airflow` resolve to *our folder* as a namespace package. **Fix:** drop
+   the PYTHONPATH; tasks invoke scripts by absolute path anyway.
+
+3. **`No module named 'airflow'` in the init container only.** It overrode
+   `entrypoint: /bin/bash`, and the image's entrypoint is what wires up the
+   environment when the container runs as a remapped host UID rather than the
+   image's own `airflow` user. **Fix:** pass a bare subcommand (`command: db
+   migrate`) like every other service does.
+
+4. **`airflow users create` does not exist in Airflow 3.** User management moved
+   to the FAB provider; the default is now SimpleAuthManager. **Fix:**
+   `SIMPLE_AUTH_MANAGER_ALL_ADMINS=true` for a localhost-only stack.
+
+5. **`httpx.ConnectError: [Errno 111] Connection refused` on every task.**
+   Airflow 3 runs tasks against a Task Execution API instead of letting them
+   touch the metadata DB; the default URL assumes localhost, which inside the
+   scheduler container is the scheduler. **Fix:** set
+   `AIRFLOW__CORE__EXECUTION_API_SERVER_URL`. Not needed in 2.x.
+
+6. **`ServerResponseError: Invalid auth token`.** The scheduler signs a JWT that
+   the task presents to that API, and each service invents its own secret at
+   startup unless told otherwise. **Fix:** a shared
+   `AIRFLOW__API_AUTH__JWT_SECRET`.
+
+7. **Two failures that only showed up as a *skipped* Understat task** — which is
+   the design working, and also the design hiding things. First `[Errno 13]
+   Permission denied`: the container runs as the host UID with group 0, so
+   anything a library writes at runtime must be group-writable, and soccerdata
+   caches inside its own package directory. Then `pyarrow or fastparquet is
+   required`: the host venv had pyarrow transitively, the container's did not.
+
+   **The lesson worth keeping:** a skip is the right behaviour for an optional
+   source, but it means a broken *configuration* looks identical to an
+   unavailable *upstream*. Read the skip reason before believing the upstream is
+   down. Both of these were our bugs, not Club Elo's.
+
+The Dockerfile now asserts `airflow version`, `dbt --version` and the imports at
+**build** time, so a broken image fails in seconds rather than three minutes into
+a DAG run.

@@ -46,6 +46,12 @@ from airflow.utils.trigger_rule import TriggerRule
 
 PROJECT_DIR = os.environ.get("PROJECT_DIR", "/opt/project")
 
+# The project's dependencies live in their own virtualenv, NOT Airflow's. dbt-core
+# and Airflow pin Jinja2 in incompatible ranges, and installing them together
+# breaks Airflow itself. See airflow/Dockerfile.
+VENV_PY = os.environ.get("PROJECT_PYTHON", "/opt/venv/bin/python")
+VENV_DBT = os.environ.get("PROJECT_DBT", "/opt/venv/bin/dbt")
+
 DEFAULT_ARGS = {
     "owner": "football-scout",
     "depends_on_past": False,
@@ -78,7 +84,7 @@ def _optional_source(name: str, script: str) -> None:
     months.
     """
     try:
-        _run(["python", script], cwd=PROJECT_DIR)
+        _run([VENV_PY, script], cwd=PROJECT_DIR)
     except Exception as exc:  # noqa: BLE001 - deliberate downgrade to skip
         raise AirflowSkipException(f"{name} unavailable, continuing without it: {exc}") from exc
 
@@ -98,7 +104,7 @@ def football_scout_refresh():
     @task(task_id="ingest_transfermarkt", retries=3)
     def ingest_transfermarkt() -> str:
         """REQUIRED. 211MB prepared dataset; validates before swapping it in."""
-        return _run(["python", "ingest/transfermarkt.py", "--force"], cwd=PROJECT_DIR)[-2000:]
+        return _run([VENV_PY, "ingest/transfermarkt.py", "--force"], cwd=PROJECT_DIR)[-2000:]
 
     @task(task_id="ingest_understat", retries=2)
     def ingest_understat() -> None:
@@ -128,11 +134,14 @@ def football_scout_refresh():
         model whose test fails does not have its downstream children built on top
         of bad data. That is the whole reason CLAUDE.md insists on build.
         """
-        return _run(["dbt", "build"], cwd=f"{PROJECT_DIR}/transform")[-4000:]
+        return _run([VENV_DBT, "build"], cwd=f"{PROJECT_DIR}/transform")[-4000:]
 
     @task(task_id="report")
     def report() -> dict:
         """Summarise what the run produced, so the log answers 'did it work?'."""
+        import sys
+
+        sys.path.insert(0, "/opt/venv/lib/python3.12/site-packages")
         import duckdb
 
         con = duckdb.connect(f"{PROJECT_DIR}/data/scout.duckdb", read_only=True)
