@@ -4,9 +4,26 @@ Working agreement for Claude Code on this repo. Read `SPEC.md` before doing anyt
 
 ## What this project is
 
-A local football scouting tool. It ingests free football data into DuckDB, transforms it with dbt, scores players on performance / trajectory / availability, and serves a ranked shortlist of under-€6m targets through Streamlit, with per-player drill-down.
+**A data engineering portfolio project with a real question behind it.**
 
-Personal project, runs on one laptop, no cloud, no server, no auth.
+Panathinaikos have not won the Greek league since 2010 — 16 years as of 2026 — and have done
+nothing meaningful in Europe in that time. They are not poor: they spent **€30.7m on 11 signings in
+25/26** and €20.5m the season before. The question this project answers is therefore not "who is
+cheap" but: **could a disciplined, data-driven process have spent that money better?**
+
+That question is checkable, which is the point. The backtest (SPEC §7) runs the model as of a past
+date and compares what it would have recommended against what Panathinaikos actually signed.
+
+It ingests free football data with Python, models it with dbt in DuckDB, orchestrates the refresh
+with Airflow, ships through CI, and presents the result in Streamlit.
+
+Two audiences, and both matter:
+1. **The owner**, who supports the club and wants the answer.
+2. **An interviewer**, who wants to see whether this person can build a pipeline, justify its
+   design, and be honest about what it cannot do.
+
+The second audience is why `docs/decisions/` exists and why the honest limitations in
+`docs/phase1_findings.md` stay in the repo rather than being tidied away.
 
 ## Stack — do not substitute without asking
 
@@ -19,8 +36,18 @@ Personal project, runs on one laptop, no cloud, no server, no auth.
 | Charts | **Plotly** | Interactive, works well in Streamlit |
 | Env | **uv** | Fast, lockfile-based |
 | Fuzzy matching | **rapidfuzz** | Entity resolution |
+| Orchestration | **Airflow** (Docker Compose) | Weekly refresh: ingest → dbt build → test |
+| CI/CD | **GitHub Actions** | Lint, dbt build against a fixture, tests, on every push |
+| Code quality | **sqlfluff + ruff + pre-commit** | Enforced, not debated |
 
-No Postgres, no Docker, no Airflow, no cloud warehouse, no web framework. If a task seems to need one, stop and ask.
+No Postgres, no cloud warehouse, no web framework. If a task seems to need one, stop and ask.
+
+**On Airflow, be honest.** A weekly refresh on one laptop does not need it — `cron` would do. It is
+here because (a) the owner wants to learn it and (b) orchestration is what a data engineering
+portfolio is judged on. *Say this plainly in interviews*: "I know cron would suffice; I chose
+Airflow for retries, backfill and dependency management across a multi-source pipeline, and because
+it is what I wanted to learn." Pretending it was technically required is a worse answer than the
+truth. See `docs/decisions/0005-airflow-over-cron.md`.
 
 ## Hard rules
 
@@ -49,6 +76,15 @@ No Postgres, no Docker, no Airflow, no cloud warehouse, no web framework. If a t
 - Backtest code has a leakage test asserting no feature references data after `as_of_date`.
 - Per-90 metrics have a minutes-threshold test — no rates computed on trivial samples.
 - Run `dbt build` (not just `dbt run`) before declaring a phase complete.
+
+## Decision records
+
+Every non-obvious choice gets an ADR in `docs/decisions/`, numbered, in the format the existing
+ones use. Write it **when the decision is made**, not retrospectively at the end.
+
+An ADR is worth writing when a reasonable engineer would ask "why did you do it that way?" — which
+is exactly the interview question. Record what was rejected and why, not just what was chosen; the
+rejected option is usually the more interesting half.
 
 ## Working style
 
