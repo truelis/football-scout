@@ -28,6 +28,13 @@ dev = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+extend-exclude = [
+    # dbt writes compiled copies of int_player_identity.py here. Gitignored, so
+    # CI never sees them, but a local lint after `dbt build` would fail on
+    # generated code we do not control.
+    "transform/target",
+    "transform/dbt_packages",
+]
 
 [tool.ruff.lint]
 # Pinned explicitly so the ruleset does not drift with ruff releases.

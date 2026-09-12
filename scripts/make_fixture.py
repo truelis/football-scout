@@ -1,19 +1,46 @@
-"""Generate a synthetic transfermarkt-datasets.duckdb using the REAL schemas.
+"""Generate a synthetic dataset using the REAL schemas, for CI and local dev.
 
-Lets you build and test the whole pipeline without downloading the full dataset,
-and serves as the CI fixture. Schemas mirror the curated models in
-dcaribou/transfermarkt-datasets exactly. Swap in the real file for real results.
+Lets the whole pipeline build and test without the 211MB download, which is what
+makes CI possible at all - data/ is gitignored, so a runner has nothing.
+
+Produces BOTH sources:
+  * a transfermarkt-datasets.duckdb with the five tables staging reads
+  * an understat_player_season.parquet
+
+The Understat rows deliberately reuse the Transfermarkt player names for the
+leagues Understat actually covers. Entity resolution then matches on them, and
+assert_understat_match_coverage - which fails the build below 90% - has something
+real to check. Random names would make that test fail on the fixture while
+passing on live data, which is the worst of both.
+
+  python scripts/make_fixture.py --out data/fixture.duckdb
 """
 
+import argparse
 import random
 from datetime import date, timedelta
+from pathlib import Path
 
 import duckdb
 import pandas as pd
 
 random.seed(7)
-OUT = "data/transfermarkt-datasets.duckdb"
 TODAY = date(2026, 9, 4)
+
+ap = argparse.ArgumentParser(description=__doc__)
+# NOT defaulted to the real filename. An earlier version wrote straight over
+# data/transfermarkt-datasets.duckdb, so running it by accident destroyed the
+# 211MB download and every later run silently used synthetic data.
+ap.add_argument(
+    "--out",
+    default="data/fixture.duckdb",
+    help="output DuckDB path (never the real dataset by default)",
+)
+ap.add_argument("--understat-out", default="data/raw/understat_player_season.parquet")
+args = ap.parse_args()
+OUT = args.out
+Path(OUT).parent.mkdir(parents=True, exist_ok=True)
+Path(args.understat_out).parent.mkdir(parents=True, exist_ok=True)
 
 LEAGUES = {
     "GB1": ("Premier League", "England"),
@@ -28,7 +55,48 @@ LEAGUES = {
     "DK1": ("Superliga", "Denmark"),
     "TR1": ("Super Lig", "Turkiye"),
     "SC1": ("Premiership", "Scotland"),
+    "RU1": ("Premier Liga", "Russia"),
+    "UKR1": ("Premier Liga", "Ukraine"),
 }
+
+# Exactly the leagues Understat publishes. Anything else has no xG by nature.
+UNDERSTAT_LEAGUES = {
+    "GB1": "ENG-Premier League",
+    "ES1": "ESP-La Liga",
+    "IT1": "ITA-Serie A",
+    "L1": "GER-Bundesliga",
+    "FR1": "FRA-Ligue 1",
+    "RU1": "RUS-Premier League",
+}
+# Names must be ALPHABETIC and distinct. int_player_identity normalises with
+# [^a-z\s] -> ' ', so "Player 1001" collapses to "player" and every fixture
+# player becomes the same string: entity resolution then matched 6 of 1,728 and
+# the coverage test failed on the fixture while passing on live data. Encoding the
+# id in letters keeps each name unique after normalisation.
+FIRST = [
+    "Andreas",
+    "Dimitrios",
+    "Giorgos",
+    "Kostas",
+    "Nikos",
+    "Petros",
+    "Stavros",
+    "Vasilis",
+    "Yannis",
+    "Thanasis",
+    "Marios",
+    "Christos",
+]
+
+
+def _alpha_id(n: int) -> str:
+    out = ""
+    while n:
+        n, r = divmod(n, 26)
+        out = chr(97 + r) + out
+    return out.capitalize() or "A"
+
+
 POS = {
     "Attack": ["Centre-Forward", "Left Winger", "Right Winger"],
     "Midfield": ["Central Midfield", "Attacking Midfield", "Defensive Midfield"],
@@ -40,7 +108,7 @@ con = duckdb.connect(OUT)
 con.execute("""CREATE OR REPLACE TABLE competitions(
  competition_id VARCHAR, competition_code VARCHAR, name VARCHAR, sub_type VARCHAR,
  type VARCHAR, country_id INTEGER, country_name VARCHAR, domestic_league_code VARCHAR,
- confederation VARCHAR, url VARCHAR, is_major_national_league BOOLEAN)""")
+ confederation VARCHAR, total_clubs INTEGER, url VARCHAR)""")
 con.execute("""CREATE OR REPLACE TABLE clubs(
  club_id INTEGER, club_code VARCHAR, name VARCHAR, domestic_competition_id VARCHAR,
  total_market_value DOUBLE, squad_size INTEGER, average_age DOUBLE,
@@ -75,8 +143,8 @@ comps = [
         ctry,
         cid,
         "europa",
+        12,
         f"https://x/{cid}",
-        True,
     ]
     for i, (cid, (nm, ctry)) in enumerate(LEAGUES.items())
 ]
@@ -117,12 +185,13 @@ for club_id, lg, club_name in clubs:
         pos = random.choice(list(POS))
         q = random.random()
         base = max(25_000, (10 ** random.uniform(4.7, 7.6)) * (1.6 - abs(age - 25) / 18))
+        full_name = f"{random.choice(FIRST)} {_alpha_id(pid)}"
         players.append(
             [
                 pid,
-                "F",
-                f"L{pid}",
-                f"Player {pid}",
+                full_name.split()[0],
+                full_name.split()[1],
+                full_name,
                 2025,
                 club_id,
                 f"p{pid}",
@@ -162,7 +231,7 @@ for club_id, lg, club_name in clubs:
                         club_id,
                         club_id,
                         gd,
-                        f"Player {pid}",
+                        full_name,
                         lg,
                         random.randint(0, 1),
                         0,
@@ -186,5 +255,50 @@ for tbl, rows in [
     df = pd.DataFrame(rows, columns=COLS[tbl])
     con.execute(f"INSERT INTO {tbl} SELECT * FROM df")
     print(f"{tbl:20} {len(rows):>8,}")
+
+# ---- Understat, for the leagues it actually covers -------------------------
+# Names are reused from the Transfermarkt rows above so entity resolution has
+# something to resolve; see the module docstring.
+tm_players = pd.DataFrame(players, columns=COLS["players"])
+us_rows = []
+for comp_id, us_league in UNDERSTAT_LEAGUES.items():
+    pool = tm_players[tm_players["current_club_domestic_competition_id"] == comp_id]
+    for season_key, season_id in (("2425", 2024), ("2526", 2025)):
+        for r in pool.itertuples():
+            mins = random.randint(300, 3000)
+            npxg = round(random.uniform(0, 0.55) * mins / 90, 3)
+            xa = round(random.uniform(0, 0.35) * mins / 90, 3)
+            us_rows.append(
+                {
+                    "league": us_league,
+                    "season": season_key,
+                    "team": r.current_club_name,
+                    "player": r.name,
+                    "league_id": comp_id,
+                    "season_id": season_id,
+                    "team_id": int(r.current_club_id),
+                    "player_id": int(r.player_id),
+                    "position": "F S",
+                    "matches": max(1, mins // 75),
+                    "minutes": mins,
+                    "goals": int(npxg * random.uniform(0.6, 1.4)),
+                    "xg": npxg + round(random.uniform(0, 0.4), 3),
+                    "np_goals": int(npxg * random.uniform(0.6, 1.4)),
+                    "np_xg": npxg,
+                    "assists": int(xa * random.uniform(0.5, 1.5)),
+                    "xa": xa,
+                    "shots": random.randint(0, 90),
+                    "key_passes": random.randint(0, 70),
+                    "yellow_cards": random.randint(0, 8),
+                    "red_cards": 0,
+                    "xg_chain": round(npxg + xa + random.uniform(0, 3), 3),
+                    "xg_buildup": round(random.uniform(0, 4), 3),
+                }
+            )
+us = pd.DataFrame(us_rows)
+us.to_parquet(args.understat_out, index=False)
+print(f"{'understat (parquet)':20} {len(us):>8,}")
+
 con.close()
 print(f"fixture written: {OUT}")
+print(f"understat written: {args.understat_out}")

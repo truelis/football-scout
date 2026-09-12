@@ -1,0 +1,149 @@
+# CI for football-scout.
+#
+# The constraint that shapes all of this: data/ is gitignored. A runner has no
+# 211MB Transfermarkt download and no Understat parquet, so CI cannot touch real
+# data. scripts/make_fixture.py generates both sources with the REAL schemas
+# instead, which means CI verifies the thing that actually breaks - models and
+# tests against the shapes they will meet - without any network dependency on a
+# scraper that might be down.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.12.10"
+
+jobs:
+  lint:
+    name: Lint (ruff + sqlfluff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: ruff
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+      - name: sqlfluff
+        # Uses the jinja templater, so no database and no profile are needed.
+        run: uv run sqlfluff lint transform/models transform/tests
+
+  build:
+    name: dbt build against the fixture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen
+
+      - name: Generate synthetic sources
+        # Writing to the canonical paths is safe here and ONLY here: a runner has
+        # an empty data/. Locally the script defaults elsewhere, because an early
+        # version overwrote the real 211MB download.
+        run: |
+          uv run python scripts/make_fixture.py \
+            --out data/transfermarkt-datasets.duckdb \
+            --understat-out data/raw/understat_player_season.parquet
+
+      - name: dbt deps
+        working-directory: transform
+        run: uv run dbt deps
+
+      - name: dbt build
+        working-directory: transform
+        # `build`, not `run` then `test`: build interleaves them so a model whose
+        # test fails never has children built on top of bad data.
+        run: uv run dbt build
+
+      - name: Shortlist must not be empty
+        # A green build that produced nothing is worse than a red one, because
+        # nobody investigates green (CLAUDE.md rule 5).
+        run: |
+          uv run python - <<'PY'
+          import duckdb, sys
+          con = duckdb.connect("data/scout.duckdb", read_only=True)
+          n = con.execute("SELECT count(*) FROM mart_shortlist").fetchone()[0]
+          print(f"shortlist rows: {n}")
+          sys.exit(0 if n > 0 else "shortlist is empty after a successful build")
+          PY
+
+  leakage:
+    name: Backtest leakage guards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv sync --frozen
+      - name: Generate synthetic sources
+        run: |
+          uv run python scripts/make_fixture.py \
+            --out data/transfermarkt-datasets.duckdb \
+            --understat-out data/raw/understat_player_season.parquet
+      - name: dbt deps
+        working-directory: transform
+        run: uv run dbt deps
+
+      - name: Rebuild at a PAST as_of date
+        working-directory: transform
+        # The point of this job. assert_market_value_is_as_of and
+        # assert_player_universe_is_as_of pass trivially at today's date - they
+        # only bite when the world is rebuilt in the past, which is exactly when
+        # a leak would silently invalidate the backtest. Three real leaks were
+        # found this way; without this job a fourth would reach main unnoticed.
+        run: |
+          uv run dbt build --target backtest \
+            --vars '{as_of_date: "2025-01-01", reference_season: 2024}'
+
+  dag:
+    name: Airflow DAG imports
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Airflow
+        # Constraints file, not a bare pip install: Airflow's dependency tree is
+        # famously conflict-prone, and resolving it unconstrained is how the
+        # local image ended up with a broken Airflow (see ADR-0007).
+        run: |
+          pip install "apache-airflow==3.3.1" \
+            --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-3.3.1/constraints-3.12.txt"
+      - name: DAG parses and has no import errors
+        env:
+          AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+        # Catches the class of mistake that otherwise only shows up as a red DAG
+        # in the UI after a deploy.
+        run: |
+          python - <<'PY'
+          from airflow.models import DagBag
+
+          # No include_examples kwarg: removed in Airflow 3.3. Examples are off
+          # via AIRFLOW__CORE__LOAD_EXAMPLES in the step env instead.
+          bag = DagBag("airflow/dags")
+          if bag.import_errors:
+              for f, err in bag.import_errors.items():
+                  print(f"::error file={f}::{err}")
+              raise SystemExit("DAG import errors")
+          for dag_id, dag in bag.dags.items():
+              print(f"{dag_id}: {len(dag.tasks)} tasks -> {sorted(t.task_id for t in dag.tasks)}")
+          assert "football_scout_refresh" in bag.dags, "expected DAG missing"
+          PY

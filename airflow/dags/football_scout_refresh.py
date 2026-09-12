@@ -42,7 +42,7 @@ from datetime import datetime, timedelta
 import pendulum
 from airflow.exceptions import AirflowSkipException
 from airflow.sdk import dag, task
-from airflow.utils.trigger_rule import TriggerRule
+from airflow.task.trigger_rule import TriggerRule  # airflow.utils path is deprecated in 3.3
 
 PROJECT_DIR = os.environ.get("PROJECT_DIR", "/opt/project")
 
