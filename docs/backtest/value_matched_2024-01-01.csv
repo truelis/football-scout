@@ -1,0 +1,9 @@
+bucket,group,n,median_growth,median_delta_eur
+0.5-1M,shortlist,84,0.6904761904761905,500000.0
+1-2M,shortlist,70,0.6111111111111112,1000000.0
+2-4M,pao_signings,15,-0.19999999999999996,-500000.0
+2-4M,shortlist,76,0.4285714285714286,1500000.0
+<0.5M,pao_signings,14,0.0,0.0
+<0.5M,shortlist,87,0.7,250000.0
+>4M,not_shortlisted_u23,228,0.25,5000000.0
+>4M,pao_signings,9,-0.125,-1000000.0
