@@ -12,16 +12,25 @@ models:
         tests: [unique, not_null]
       - name: age
         description: >
-          Floor only, deliberately. An upper bound belongs on mart_player_scores,
-          not here: 104 retired players are already over 50 (oldest b. 1968) and
-          every one of them ages by a year each time as_of_date advances, so any
-          ceiling on this model is a test that rots on a timer. The floor still
-          catches the failure that matters - a corrupt or future date_of_birth.
-          Nulls pass: 49 players genuinely have no DOB upstream and
-          accepted_range ignores nulls, so this is not a completeness check.
+          Bounded below by ZERO, not by a playing age, and with no ceiling at all.
+          Both limits are deliberate and both were learned the hard way.
+
+          A ceiling rots on a timer: 104 retired players are already over 50
+          (oldest born 1968) and each ages by a year every time as_of_date
+          advances. A floor of 14 looks sensible until the backtest rebuilds at a
+          past date, when 286 future professionals are legitimately children -
+          not corrupt data, just people who had not debuted yet. This model is
+          deliberately the FULL historical universe, so the only thing it can
+          honestly assert is that nobody was born after as_of_date.
+
+          The scouting-population assertion (14-50, not null) lives on
+          mart_player_scores, where every row has cleared a minutes threshold and
+          is therefore genuinely a professional at that date. Nulls pass here: 49
+          players have no DOB upstream and accepted_range ignores nulls, so this
+          is not a completeness check.
         tests:
           - dbt_utils.accepted_range:
-              arguments: {min_value: 14}
+              arguments: {min_value: 0}
 
   - name: fct_player_season
     description: >

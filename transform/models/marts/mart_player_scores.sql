@@ -1,11 +1,25 @@
 -- Three independent axes, each 0-100, plus a composite.
 -- EVERY input is retained on the row so the UI can explain a ranking.
+-- Players who had actually played by as_of_date. See the leakage note in
+-- `eligible` below, and tests/assert_player_universe_is_as_of.sql.
+WITH has_birth_date AS (
+    SELECT player_id
+    FROM {{ ref('stg_tm__players') }}
+    WHERE date_of_birth IS NOT NULL
+),
+
+active_by_as_of AS (
+    SELECT DISTINCT player_id
+    FROM {{ ref('stg_tm__appearances') }}
+    WHERE match_date <= DATE '{{ var("as_of_date") }}'
+),
+
 -- The SCORING SAMPLE is domestic-league only. Cup and European rows exist in
 -- fct_player_season and are deliberately kept there - they are squad-role and
 -- level-progression evidence for Phases 2-3 - but they must not be pooled into
 -- a per-90 rate, or a player's output would depend on how far his club ran in
 -- a cup. This is the one place that choice is made.
-WITH ref_season AS (
+ref_season AS (
     SELECT * FROM {{ ref('fct_player_season') }}
     WHERE
         season = {{ var('reference_season') }}
@@ -94,6 +108,16 @@ eligible AS (
     FROM agg AS a
     LEFT JOIN prev_season AS p USING (player_id)
     WHERE a.minutes_played >= {{ var('min_minutes_if_trending') }}
+    -- Scored players must already have been professionals at as_of_date.
+    -- Rebuilding at a past date otherwise admits people who were children
+    -- then - 286 of them under 14 at 2023-01-01 - which both leaks the
+    -- future and inflates every percentile pool they land in.
+    AND a.player_id IN (SELECT act.player_id FROM active_by_as_of AS act)
+    -- Age carries half the trajectory axis, so a player with no date of
+    -- birth upstream (49 of 50k) cannot be scored without inventing it.
+    -- Excluding him is honest; defaulting his age would be a fabricated
+    -- number wearing a real one's clothes.
+    AND a.player_id IN (SELECT dob.player_id FROM has_birth_date AS dob)
     -- Excluded position groups come from dbt_project.yml, never hard-coded.
     -- Goalkeepers have no metrics at all in the free data; defenders have no
     -- DEFENSIVE ones, so ranking them on goal contributions measures the

@@ -25,3 +25,14 @@ football_scout:
         - path: ../data/transfermarkt-datasets.duckdb
           alias: tm
           read_only: true
+
+    # Backtest target: a SEPARATE DuckDB file so rebuilding the world at a past
+    # as_of_date never overwrites the live warehouse the app reads.
+    backtest:
+      type: duckdb
+      path: ../data/backtest.duckdb
+      threads: 4
+      attach:
+        - path: ../data/transfermarkt-datasets.duckdb
+          alias: tm
+          read_only: true
