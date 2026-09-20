@@ -14,6 +14,12 @@
 ---
 x-airflow-common: &airflow-common
   build: .
+  # Name the built image explicitly. Without this, Compose builds a SEPARATE
+  # image per service that declares `build:` - four near-identical entries
+  # (airflow-airflow-scheduler, -apiserver, -init, -dag-processor) cluttering
+  # `docker images`. They shared layers so the disk cost was the same, but four
+  # names for one thing is confusing. Now: one image, four containers.
+  image: football-scout-airflow:local
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
@@ -38,6 +44,10 @@ x-airflow-common: &airflow-common
     # on localhost, skipping login entirely is simpler and no less secure than a
     # hardcoded airflow/airflow. Do NOT carry this to anything reachable.
     AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "true"
+    # The scheduler's healthcheck curls localhost:8974/health, and that server
+    # only exists when this is on. Without it the container runs perfectly but
+    # reports "unhealthy" forever, which trains you to ignore the status column.
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     # Our tasks shell out to project scripts; this is where they live in-container.
     PROJECT_DIR: /opt/project
     # NO PYTHONPATH=/opt/project. The repo has an `airflow/` directory at its
