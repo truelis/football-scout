@@ -144,6 +144,19 @@ uv run pre-commit run --all-files
 ambiguous and broke `int_player_value_history` at runtime. Lint passing is not proof the SQL is
 still correct - **always run `dbt build` after a fix pass**, and check row counts.
 
+### Stop the Airflow stack when you are not using it
+
+```bash
+cd airflow && docker compose up -d    # start
+cd airflow && docker compose down     # STOP WHEN DONE
+```
+
+Left running it costs **~87% of a CPU core continuously**, for a pipeline that
+runs once a week. Idle polling is now tuned down hard, which cut container CPU
+from ~38% to ~13% — but the Docker VM still burns ~77% on its own, bridging the
+Google Drive FUSE mount into Linux. That part cannot be tuned away; only stopping
+the containers fixes it (VM drops to ~0%). See ADR-0007, addendum 2.
+
 ### Google Drive `Icon\r` files break the venv
 
 macOS stores a folder's custom icon in a file literally named `Icon` + carriage return, with the

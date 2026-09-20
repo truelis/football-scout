@@ -126,3 +126,49 @@ and because "it worked first time" is never the useful part of a build log.
 The Dockerfile now asserts `airflow version`, `dbt --version` and the imports at
 **build** time, so a broken image fails in seconds rather than three minutes into
 a DAG run.
+
+---
+
+## Addendum 2: the stack must not be left running
+
+Leaving the four containers up after testing cost **~87% of a CPU core,
+continuously, for days** — fans audible, battery draining, for a pipeline that
+does something once a week.
+
+Measured, idle, doing nothing:
+
+| | containers | Docker VM process |
+|---|---:|---:|
+| default settings | ~38% | 87% |
+| after tuning below | 13% | 77% |
+| stopped | 0% | **0–3%** |
+
+Two separate causes, and the tuning only fixes the smaller one.
+
+**Airflow's defaults assume a server.** They re-read every DAG file every 30s and
+list the folder every 5 minutes, forever, so a DAG can start within seconds of
+being edited. A weekly job does not need that. `MIN_FILE_PROCESS_INTERVAL`,
+`DAG_DIR_LIST_INTERVAL`, `SCHEDULER_IDLE_SLEEP_TIME` and the heartbeats are now
+tuned down hard, which cut container CPU by two thirds.
+
+**The bigger cost is the bind mount, and it cannot be tuned away.** With
+containers reporting 13%, the VM process still burned 77% — the gap is work the
+VM does on its own behalf. The repository lives in a **Google Drive** folder, and
+Docker has to bridge that FUSE filesystem into the Linux VM on every file
+operation. Stopping the containers takes the VM to ~0%, so the containers cause
+it, but it is not visible in their own CPU figures.
+
+**So: run the stack only while working on it.**
+
+```bash
+cd airflow && docker compose up -d    # start
+cd airflow && docker compose down     # STOP WHEN DONE
+```
+
+This is ADR-0005's admission arriving in the form of a hot laptop: cron genuinely
+would suffice for this workload. Airflow is here to be learned and demonstrated,
+and the right way to hold that is to start it when you want it and stop it after.
+
+The deeper fix, if this ever becomes a daily annoyance, is to move the repository
+off Google Drive to a local path. It is on GitHub now, so it can be cloned
+anywhere; Drive sync is no longer the thing keeping it safe.

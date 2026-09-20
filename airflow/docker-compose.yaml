@@ -48,6 +48,26 @@ x-airflow-common: &airflow-common
     # only exists when this is on. Without it the container runs perfectly but
     # reports "unhealthy" forever, which trains you to ignore the status column.
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+
+    # ---- idle cost, tuned down hard ----------------------------------------
+    # Airflow's defaults assume a server running hundreds of DAGs that must
+    # start within seconds. This is ONE weekly DAG on a laptop, and the defaults
+    # cost ~87% of a CPU core CONTINUOUSLY - fans on, battery draining, for a
+    # pipeline that does something once a week.
+    #
+    # It is worse here than it would be normally, because the dags folder and
+    # the project are bind-mounted from a GOOGLE DRIVE folder. Drive is a FUSE
+    # filesystem, so every stat() the parser makes is far more expensive than on
+    # a local disk - and by default Airflow re-reads every DAG file every 30s
+    # and lists the folder every 5 minutes, forever.
+    #
+    # A weekly job does not care about a few minutes of scheduling latency.
+    AIRFLOW__DAG_PROCESSOR__MIN_FILE_PROCESS_INTERVAL: "300"   # was 30
+    AIRFLOW__DAG_PROCESSOR__DAG_DIR_LIST_INTERVAL: "300"
+    AIRFLOW__DAG_PROCESSOR__PARSING_PROCESSES: "1"             # was 2
+    AIRFLOW__SCHEDULER__SCHEDULER_IDLE_SLEEP_TIME: "5"         # was 1
+    AIRFLOW__SCHEDULER__JOB_HEARTBEAT_SEC: "30"
+    AIRFLOW__SCHEDULER__SCHEDULER_HEARTBEAT_SEC: "30"
     # Our tasks shell out to project scripts; this is where they live in-container.
     PROJECT_DIR: /opt/project
     # NO PYTHONPATH=/opt/project. The repo has an `airflow/` directory at its
